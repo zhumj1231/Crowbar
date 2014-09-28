@@ -278,6 +278,4 @@ struct CRB_Interpreter_tag {
     int                 current_line_number;
 };
 
-
-
 #endif /* PRIVATE_CROWBAR_H_INCLUDED */
