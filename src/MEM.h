@@ -7,7 +7,7 @@
 typedef enum {
 	MEM_FAIL_AND_EXIT,
 	MEM_FAIL_AND_RETURN
-} MEM_Failmode;
+} MEM_FailMode;
 
 typedef struct MEM_Controller_tag *MEM_Controller;
 typedef void (*MEM_ErrorHandler)(MEM_Controller, char *, int, char *);
