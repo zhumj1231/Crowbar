@@ -55,3 +55,33 @@ CRB_Value crb_nv_print_proc(CRB_Interpreter *interpreter,
     return value;
 }
 
+static CRB_Boolean
+check_native_pointer(CRB_Value *value)
+{
+    return value->u.native_pointer.info == &st_native_lib_info;
+}
+
+CRB_Value crb_nv_fclose_proc(CRB_Interpreter *interpreter,
+                             int arg_count, CRB_Value *args)
+{
+    CRB_Value value;
+    FILE *fp;
+
+    value.type = CRB_NULL_VALUE;
+    if (arg_count < 1) {
+        crb_runtime_error(0, ARGUMENT_TOO_FEW_ERR,
+                          MESSAGE_ARGUMENT_END);
+    } else if (arg_count > 1) {
+        crb_runtime_error(0, ARGUMENT_TOO_MANY_ERR,
+                          MESSAGE_ARGUMENT_END);
+    }
+    if (args[0].type != CRB_NATIVE_POINTER_VALUE
+        || !check_native_pointer(&args[0])) {
+        crb_runtime_error(0, FCLOSE_ARGUMENT_TYPE_ERR,
+                          MESSAGE_ARGUMENT_END);
+    }
+    fp = args[0].u.native_pointer.pointer;
+    fclose(fp);
+
+    return value;
+}
