@@ -328,5 +328,28 @@ eval_compare_string(ExpressionType operator,
     return result;
 }
 
+static CRB_Boolean
+eval_binary_null(CRB_Interpreter *inter, ExpressionType operator,
+                 CRB_Value *left, CRB_Value *right, int line_number)
+{
+    CRB_Boolean result;
+
+    if (operator == EQ_EXPRESSION) {
+        result = left->type == CRB_NULL_VALUE && right->type == CRB_NULL_VALUE;
+    } else if (operator == NE_EXPRESSION) {
+        result =  !(left->type == CRB_NULL_VALUE
+                    && right->type == CRB_NULL_VALUE);
+    } else {
+        char *op_str = crb_get_operator_string(operator);
+        crb_runtime_error(line_number, NOT_NULL_OPERATOR_ERR,
+                          STRING_MESSAGE_ARGUMENT, "operator", op_str,
+                          MESSAGE_ARGUMENT_END);
+    }
+    release_if_string(left);
+    release_if_string(right);
+
+    return result;
+}
+
 
 
