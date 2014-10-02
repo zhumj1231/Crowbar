@@ -369,7 +369,102 @@ chain_string(CRB_Interpreter *inter, CRB_String *left, CRB_String *right)
     return ret;
 }
 
+CRB_Value
+crb_eval_binary_expression(CRB_Interpreter *inter, LocalEnvironment *env,
+                           ExpressionType operator,
+                           Expression *left, Expression *right)
+{
+    CRB_Value   left_val;
+    CRB_Value   right_val;
+    CRB_Value   result;
 
+    left_val = eval_expression(inter, env, left);
+    right_val = eval_expression(inter, env, right);
+
+    if (left_val.type == CRB_INT_VALUE
+        && right_val.type == CRB_INT_VALUE) {
+        eval_binary_int(inter, operator,
+                        left_val.u.int_value, right_val.u.int_value,
+                        &result, left->line_number);
+    } else if (left_val.type == CRB_DOUBLE_VALUE
+               && right_val.type == CRB_DOUBLE_VALUE) {
+        eval_binary_double(inter, operator,
+                           left_val.u.double_value, right_val.u.double_value,
+                           &result, left->line_number);
+    } else if (left_val.type == CRB_INT_VALUE
+               && right_val.type == CRB_DOUBLE_VALUE) {
+        left_val.u.double_value = left_val.u.int_value;
+        eval_binary_double(inter, operator,
+                           left_val.u.double_value, right_val.u.double_value,
+                           &result, left->line_number);
+    } else if (left_val.type == CRB_DOUBLE_VALUE
+               && right_val.type == CRB_INT_VALUE) {
+        right_val.u.double_value = right_val.u.int_value;
+        eval_binary_double(inter, operator,
+                           left_val.u.double_value, right_val.u.double_value,
+                           &result, left->line_number);
+    } else if (left_val.type == CRB_BOOLEAN_VALUE
+               && right_val.type == CRB_BOOLEAN_VALUE) {
+        result.type = CRB_BOOLEAN_VALUE;
+        result.u.boolean_value
+            = eval_binary_boolean(inter, operator,
+                                  left_val.u.boolean_value,
+                                  right_val.u.boolean_value,
+                                  left->line_number);
+    } else if (left_val.type == CRB_STRING_VALUE
+               && operator == ADD_EXPRESSION) {
+        char    buf[LINE_BUF_SIZE];
+        CRB_String *right_str;
+
+        if (right_val.type == CRB_INT_VALUE) {
+            sprintf(buf, "%d", right_val.u.int_value);
+            right_str = crb_create_crowbar_string(inter, MEM_strdup(buf));
+        } else if (right_val.type == CRB_DOUBLE_VALUE) {
+            sprintf(buf, "%f", right_val.u.double_value);
+            right_str = crb_create_crowbar_string(inter, MEM_strdup(buf));
+        } else if (right_val.type == CRB_BOOLEAN_VALUE) {
+            if (right_val.u.boolean_value) {
+                right_str = crb_create_crowbar_string(inter,
+                                                      MEM_strdup("true"));
+            } else {
+                right_str = crb_create_crowbar_string(inter,
+                                                      MEM_strdup("false"));
+            }
+        } else if (right_val.type == CRB_STRING_VALUE) {
+            right_str = right_val.u.string_value;
+        } else if (right_val.type == CRB_NATIVE_POINTER_VALUE) {
+            sprintf(buf, "(%s:%p)",
+                    right_val.u.native_pointer.info->name,
+                    right_val.u.native_pointer.pointer);
+            right_str = crb_create_crowbar_string(inter, MEM_strdup(buf));
+        } else if (right_val.type == CRB_NULL_VALUE) {
+            right_str = crb_create_crowbar_string(inter, MEM_strdup("null"));
+        } 
+        result.type = CRB_STRING_VALUE;
+        result.u.string_value = chain_string(inter,
+                                             left_val.u.string_value,
+                                             right_str);
+    } else if (left_val.type == CRB_STRING_VALUE
+               && right_val.type == CRB_STRING_VALUE) {
+        result.type = CRB_BOOLEAN_VALUE;
+        result.u.boolean_value
+            = eval_compare_string(operator, &left_val, &right_val,
+                                  left->line_number);
+    } else if (left_val.type == CRB_NULL_VALUE
+               || right_val.type == CRB_NULL_VALUE) {
+        result.type = CRB_BOOLEAN_VALUE;
+        result.u.boolean_value
+            = eval_binary_null(inter, operator, &left_val, &right_val,
+                               left->line_number);
+    } else {
+        char *op_str = crb_get_operator_string(operator);
+        crb_runtime_error(left->line_number, BAD_OPERAND_TYPE_ERR,
+                          STRING_MESSAGE_ARGUMENT, "operator", op_str,
+                          MESSAGE_ARGUMENT_END);
+    }
+
+    return result;
+}
 
 
 
