@@ -562,3 +562,104 @@ dispose_local_environment(CRB_Interpreter *inter, LocalEnvironment *env)
 
     MEM_free(env);
 }
+
+static CRB_Value
+call_native_function(CRB_Interpreter *inter, LocalEnvironment *env,
+                     Expression *expr, CRB_NativeFunctionProc *proc)
+{
+    CRB_Value   value;
+    int         arg_count;
+    ArgumentList        *arg_p;
+    CRB_Value   *args;
+    int         i;
+    
+    for (arg_count = 0, arg_p = expr->u.function_call_expression.argument;
+         arg_p; arg_p = arg_p->next) {
+        arg_count++;
+    }
+
+    args = MEM_malloc(sizeof(CRB_Value) * arg_count);
+    
+    for (arg_p = expr->u.function_call_expression.argument, i = 0;
+         arg_p; arg_p = arg_p->next, i++) {
+        args[i] = eval_expression(inter, env, arg_p->expression);
+    }
+    value = proc(inter, arg_count, args);
+    for (i = 0; i < arg_count; i++) {
+        release_if_string(&args[i]);
+    }
+    MEM_free(args);
+
+    return value;
+}
+
+static CRB_Value
+call_crowbar_function(CRB_Interpreter *inter, LocalEnvironment *env,
+                      Expression *expr, FunctionDefinition *func)
+{
+    CRB_Value   value;
+    StatementResult     result;
+    ArgumentList        *arg_p;
+    ParameterList       *param_p;
+    LocalEnvironment    *local_env;
+
+    local_env = alloc_local_environment();
+
+    for (arg_p = expr->u.function_call_expression.argument,
+             param_p = func->u.crowbar_f.parameter;
+         arg_p;
+         arg_p = arg_p->next, param_p = param_p->next) {
+        CRB_Value arg_val;
+
+        if (param_p == NULL) {
+            crb_runtime_error(expr->line_number, ARGUMENT_TOO_MANY_ERR,
+                              MESSAGE_ARGUMENT_END);
+        }
+        arg_val = eval_expression(inter, env, arg_p->expression);
+        crb_add_local_variable(local_env, param_p->name, &arg_val);
+    }
+    if (param_p) {
+        crb_runtime_error(expr->line_number, ARGUMENT_TOO_FEW_ERR,
+                          MESSAGE_ARGUMENT_END);
+    }
+    result = crb_execute_statement_list(inter, local_env,
+                                        func->u.crowbar_f.block
+                                        ->statement_list);
+    if (result.type == RETURN_STATEMENT_RESULT) {
+        value = result.u.return_value;
+    } else {
+        value.type = CRB_NULL_VALUE;
+    }
+    dispose_local_environment(inter, local_env);
+
+    return value;
+}
+
+static CRB_Value
+eval_function_call_expression(CRB_Interpreter *inter, LocalEnvironment *env,
+                              Expression *expr)
+{
+    CRB_Value           value;
+    FunctionDefinition  *func;
+    
+    char *identifier = expr->u.function_call_expression.identifier;
+
+    func = crb_search_function(identifier);
+    if (func == NULL) {
+        crb_runtime_error(expr->line_number, FUNCTION_NOT_FOUND_ERR,
+                          STRING_MESSAGE_ARGUMENT, "name", identifier,
+                          MESSAGE_ARGUMENT_END);
+    }
+    switch (func->type) {
+    case CROWBAR_FUNCTION_DEFINITION:
+        value = call_crowbar_function(inter, env, expr, func);
+        break;
+    case NATIVE_FUNCTION_DEFINITION:
+        value = call_native_function(inter, env, expr, func->u.native_f.proc);
+        break;
+    default:
+        DBG_panic(("bad case..%d\n", func->type));
+    }
+
+    return value;
+}
