@@ -102,3 +102,31 @@ CRB_add_global_variable(CRB_Interpreter *inter,
     inter->variable = new_variable;
     new_variable->value = *value;
 }
+
+Variable *
+crb_search_local_variable(LocalEnvironment *env, char *identifier)
+{
+    Variable    *pos;
+
+    if (env == NULL)
+        return NULL;
+    for (pos = env->variable; pos; pos = pos->next) {
+        if (!strcmp(pos->name, identifier))
+            return pos;
+    }
+   	
+   	return NULL;
+}
+
+Variable *
+crb_search_global_variable(CRB_Interpreter *inter, char *identifier)
+{
+    Variable    *pos;
+
+    for (pos = inter->variable; pos; pos = pos->next) {
+        if (!strcmp(pos->name, identifier))
+            return pos;
+    }
+
+    return NULL;
+}
