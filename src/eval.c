@@ -663,3 +663,74 @@ eval_function_call_expression(CRB_Interpreter *inter, LocalEnvironment *env,
 
     return value;
 }
+
+static CRB_Value
+eval_expression(CRB_Interpreter *inter, LocalEnvironment *env,
+                Expression *expr)
+{
+    CRB_Value   v;
+    switch (expr->type) {
+    case BOOLEAN_EXPRESSION:
+        v = eval_boolean_expression(expr->u.boolean_value);
+        break;
+    case INT_EXPRESSION:
+        v = eval_int_expression(expr->u.int_value);
+        break;
+    case DOUBLE_EXPRESSION:
+        v = eval_double_expression(expr->u.double_value);
+        break;
+    case STRING_EXPRESSION:
+        v = eval_string_expression(inter, expr->u.string_value);
+        break;
+    case IDENTIFIER_EXPRESSION:
+        v = eval_identifier_expression(inter, env, expr);
+        break;
+    case ASSIGN_EXPRESSION:
+        v = eval_assign_expression(inter, env,
+                                   expr->u.assign_expression.variable,
+                                   expr->u.assign_expression.operand);
+        break;
+    case ADD_EXPRESSION:        /* FALLTHRU */
+    case SUB_EXPRESSION:        /* FALLTHRU */
+    case MUL_EXPRESSION:        /* FALLTHRU */
+    case DIV_EXPRESSION:        /* FALLTHRU */
+    case MOD_EXPRESSION:        /* FALLTHRU */
+    case EQ_EXPRESSION: /* FALLTHRU */
+    case NE_EXPRESSION: /* FALLTHRU */
+    case GT_EXPRESSION: /* FALLTHRU */
+    case GE_EXPRESSION: /* FALLTHRU */
+    case LT_EXPRESSION: /* FALLTHRU */
+    case LE_EXPRESSION:
+        v = crb_eval_binary_expression(inter, env,
+                                       expr->type,
+                                       expr->u.binary_expression.left,
+                                       expr->u.binary_expression.right);
+        break;
+    case LOGICAL_AND_EXPRESSION:/* FALLTHRU */
+    case LOGICAL_OR_EXPRESSION:
+        v = eval_logical_and_or_expression(inter, env, expr->type,
+                                           expr->u.binary_expression.left,
+                                           expr->u.binary_expression.right);
+        break;
+    case MINUS_EXPRESSION:
+        v = crb_eval_minus_expression(inter, env, expr->u.minus_expression);
+        break;
+    case FUNCTION_CALL_EXPRESSION:
+        v = eval_function_call_expression(inter, env, expr);
+        break;
+    case NULL_EXPRESSION:
+        v = eval_null_expression();
+        break;
+    case EXPRESSION_TYPE_COUNT_PLUS_1:  /* FALLTHRU */
+    default:
+        DBG_panic(("bad case. type..%d\n", expr->type));
+    }
+    return v;
+}
+
+CRB_Value
+crb_eval_expression(CRB_Interpreter *inter, LocalEnvironment *env,
+                    Expression *expr)
+{
+    return eval_expression(inter, env, expr);
+}
