@@ -295,5 +295,38 @@ eval_binary_double(CRB_Interpreter *inter, ExpressionType operator,
     }
 }
 
+static CRB_Boolean
+eval_compare_string(ExpressionType operator,
+                    CRB_Value *left, CRB_Value *right, int line_number)
+{
+    CRB_Boolean result;
+    int cmp;
+
+    cmp = strcmp(left->u.string_value->string, right->u.string_value->string);
+
+    if (operator == EQ_EXPRESSION) {
+        result = (cmp == 0);
+    } else if (operator == NE_EXPRESSION) {
+        result = (cmp != 0);
+    } else if (operator == GT_EXPRESSION) {
+        result = (cmp > 0);
+    } else if (operator == GE_EXPRESSION) {
+        result = (cmp >= 0);
+    } else if (operator == LT_EXPRESSION) {
+        result = (cmp < 0);
+    } else if (operator == LE_EXPRESSION) {
+        result = (cmp <= 0);
+    } else {
+        char *op_str = crb_get_operator_string(operator);
+        crb_runtime_error(line_number, BAD_OPERATOR_FOR_STRING_ERR,
+                          STRING_MESSAGE_ARGUMENT, "operator", op_str,
+                          MESSAGE_ARGUMENT_END);
+    }
+    crb_release_string(left->u.string_value);
+    crb_release_string(right->u.string_value);
+
+    return result;
+}
+
 
 
