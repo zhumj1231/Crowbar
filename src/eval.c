@@ -466,5 +466,65 @@ crb_eval_binary_expression(CRB_Interpreter *inter, LocalEnvironment *env,
     return result;
 }
 
+static CRB_Value
+eval_logical_and_or_expression(CRB_Interpreter *inter,
+                               LocalEnvironment *env,
+                               ExpressionType operator,
+                               Expression *left, Expression *right)
+{
+    CRB_Value   left_val;
+    CRB_Value   right_val;
+    CRB_Value   result;
+
+    result.type = CRB_BOOLEAN_VALUE;
+    left_val = eval_expression(inter, env, left);
+
+    if (left_val.type != CRB_BOOLEAN_VALUE) {
+        crb_runtime_error(left->line_number, NOT_BOOLEAN_TYPE_ERR,
+                          MESSAGE_ARGUMENT_END);
+    }
+    if (operator == LOGICAL_AND_EXPRESSION) {
+        if (!left_val.u.boolean_value) {
+            result.u.boolean_value = CRB_FALSE;
+            return result;
+        }
+    } else if (operator == LOGICAL_OR_EXPRESSION) {
+        if (left_val.u.boolean_value) {
+            result.u.boolean_value = CRB_TRUE;
+            return result;
+        }
+    } else {
+        DBG_panic(("bad operator..%d\n", operator));
+    }
+
+    right_val = eval_expression(inter, env, right);
+    if (right_val.type != CRB_BOOLEAN_VALUE) {
+        crb_runtime_error(right->line_number, NOT_BOOLEAN_TYPE_ERR,
+                          MESSAGE_ARGUMENT_END);
+    }
+    result.u.boolean_value = right_val.u.boolean_value;
+
+    return result;
+}
 
 
+CRB_Value
+crb_eval_minus_expression(CRB_Interpreter *inter, LocalEnvironment *env,
+                          Expression *operand)
+{
+    CRB_Value   operand_val;
+    CRB_Value   result;
+
+    operand_val = eval_expression(inter, env, operand);
+    if (operand_val.type == CRB_INT_VALUE) {
+        result.type = CRB_INT_VALUE;
+        result.u.int_value = -operand_val.u.int_value;
+    } else if (operand_val.type == CRB_DOUBLE_VALUE) {
+        result.type = CRB_DOUBLE_VALUE;
+        result.u.double_value = -operand_val.u.double_value;
+    } else {
+        crb_runtime_error(operand->line_number, MINUS_OPERAND_TYPE_ERR,
+                          MESSAGE_ARGUMENT_END);
+    }
+    return result;
+}
