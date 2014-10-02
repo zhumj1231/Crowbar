@@ -351,5 +351,25 @@ eval_binary_null(CRB_Interpreter *inter, ExpressionType operator,
     return result;
 }
 
+CRB_String *
+chain_string(CRB_Interpreter *inter, CRB_String *left, CRB_String *right)
+{
+    int len;
+    char *str;
+    CRB_String *ret;
+
+    len = strlen(left->string) + strlen(right->string);
+    str = MEM_malloc(len + 1);
+    strcpy(str, left->string);
+    strcat(str, right->string);
+    ret = crb_create_crowbar_string(inter, str);
+    crb_release_string(left);
+    crb_release_string(right);
+
+    return ret;
+}
+
+
+
 
 
