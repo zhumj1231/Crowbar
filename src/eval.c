@@ -62,3 +62,48 @@ release_if_string(CRB_Value *v)
         crb_release_string(v->u.string_value);
     }
 }
+
+static Variable *
+search_global_variable_from_env(CRB_Interpreter *inter,
+                                LocalEnvironment *env, char *name)
+{
+    GlobalVariableRef *pos;
+
+    if (env == NULL) {
+        return crb_search_global_variable(inter, name);
+    }
+
+    for (pos = env->global_variable; pos; pos = pos->next) {
+        if (!strcmp(pos->variable->name, name)) {
+            return pos->variable;
+        }
+    }
+
+    return NULL;
+}
+
+static CRB_Value
+eval_identifier_expression(CRB_Interpreter *inter,
+                           LocalEnvironment *env, Expression *expr)
+{
+    CRB_Value   v;
+    Variable    *vp;
+
+    vp = crb_search_local_variable(env, expr->u.identifier);
+    if (vp != NULL) {
+        v = vp->value;
+    } else {
+        vp = search_global_variable_from_env(inter, env, expr->u.identifier);
+        if (vp != NULL) {
+            v = vp->value;
+        } else {
+            crb_runtime_error(expr->line_number, VARIABLE_NOT_FOUND_ERR,
+                              STRING_MESSAGE_ARGUMENT,
+                              "name", expr->u.identifier,
+                              MESSAGE_ARGUMENT_END);
+        }
+    }
+    refer_if_string(&v);
+
+    return v;
+}
