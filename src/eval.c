@@ -100,7 +100,7 @@ eval_identifier_expression(CRB_Interpreter *inter,
     CRB_Value   v;
     Variable    *vp;
 
-    vp = crb_search_local_variable(env, expr->u.identifier);
+    vp = crb_search_local_variable(env, expr->u.identifier);  
     if (vp != NULL) {
         v = vp->value;
     } else {
@@ -113,6 +113,7 @@ eval_identifier_expression(CRB_Interpreter *inter,
                               "name", expr->u.identifier,
                               MESSAGE_ARGUMENT_END);
         }
+        
     }
     refer_if_string(&v);
 
