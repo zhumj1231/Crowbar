@@ -139,3 +139,23 @@ eval_assign_expression(CRB_Interpreter *inter, LocalEnvironment *env,
     return v;
 }
 
+static CRB_Boolean
+eval_binary_boolean(CRB_Interpreter *inter, ExpressionType operator,
+                    CRB_Boolean left, CRB_Boolean right, int line_number)
+{
+    CRB_Boolean result;
+
+    if (operator == EQ_EXPRESSION) {
+        result = left == right;
+    } else if (operator == NE_EXPRESSION) {
+        result = left != right;
+    } else {
+        char *op_str = crb_get_operator_string(operator);
+        crb_runtime_error(line_number, NOT_BOOLEAN_OPERATOR_ERR,
+                          STRING_MESSAGE_ARGUMENT, "operator", op_str,
+                          MESSAGE_ARGUMENT_END);
+    }
+
+    return result;
+}
+
