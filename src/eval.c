@@ -159,3 +159,141 @@ eval_binary_boolean(CRB_Interpreter *inter, ExpressionType operator,
     return result;
 }
 
+static void
+eval_binary_int(CRB_Interpreter *inter, ExpressionType operator,
+                int left, int right,
+                CRB_Value *result, int line_number)
+{
+    if (dkc_is_math_operator(operator)) {
+        result->type = CRB_INT_VALUE;
+    } else if (dkc_is_compare_operator(operator)) {
+        result->type = CRB_BOOLEAN_VALUE;
+    } else {
+        DBG_panic(("operator..%d\n", operator));
+    }
+
+    switch (operator) {
+    case BOOLEAN_EXPRESSION:    /* FALLTHRU */
+    case INT_EXPRESSION:        /* FALLTHRU */
+    case DOUBLE_EXPRESSION:     /* FALLTHRU */
+    case STRING_EXPRESSION:     /* FALLTHRU */
+    case IDENTIFIER_EXPRESSION: /* FALLTHRU */
+    case ASSIGN_EXPRESSION:
+        DBG_panic(("bad case...%d", operator));
+        break;
+    case ADD_EXPRESSION:
+        result->u.int_value = left + right;
+        break;
+    case SUB_EXPRESSION:
+        result->u.int_value = left - right;
+        break;
+    case MUL_EXPRESSION:
+        result->u.int_value = left * right;
+        break;
+    case DIV_EXPRESSION:
+        result->u.int_value = left / right;
+        break;
+    case MOD_EXPRESSION:
+        result->u.int_value = left % right;
+        break;
+    case LOGICAL_AND_EXPRESSION:        /* FALLTHRU */
+    case LOGICAL_OR_EXPRESSION:
+        DBG_panic(("bad case...%d", operator));
+        break;
+    case EQ_EXPRESSION:
+        result->u.boolean_value = left == right;
+        break;
+    case NE_EXPRESSION:
+        result->u.boolean_value = left != right;
+        break;
+    case GT_EXPRESSION:
+        result->u.boolean_value = left > right;
+        break;
+    case GE_EXPRESSION:
+        result->u.boolean_value = left >= right;
+        break;
+    case LT_EXPRESSION:
+        result->u.boolean_value = left < right;
+        break;
+    case LE_EXPRESSION:
+        result->u.boolean_value = left <= right;
+        break;
+    case MINUS_EXPRESSION:              /* FALLTHRU */
+    case FUNCTION_CALL_EXPRESSION:      /* FALLTHRU */
+    case NULL_EXPRESSION:               /* FALLTHRU */
+    case EXPRESSION_TYPE_COUNT_PLUS_1:  /* FALLTHRU */
+    default:
+        DBG_panic(("bad case...%d", operator));
+    }
+}
+
+static void
+eval_binary_double(CRB_Interpreter *inter, ExpressionType operator,
+                   double left, double right,
+                   CRB_Value *result, int line_number)
+{
+    if (dkc_is_math_operator(operator)) {
+        result->type = CRB_DOUBLE_VALUE;
+    } else if (dkc_is_compare_operator(operator)) {
+        result->type = CRB_BOOLEAN_VALUE;
+    } else {
+        DBG_panic(("operator..%d\n", operator));
+    }
+
+    switch (operator) {
+    case BOOLEAN_EXPRESSION:    /* FALLTHRU */
+    case INT_EXPRESSION:        /* FALLTHRU */
+    case DOUBLE_EXPRESSION:     /* FALLTHRU */
+    case STRING_EXPRESSION:     /* FALLTHRU */
+    case IDENTIFIER_EXPRESSION: /* FALLTHRU */
+    case ASSIGN_EXPRESSION:
+        DBG_panic(("bad case...%d", operator));
+        break;
+    case ADD_EXPRESSION:
+        result->u.double_value = left + right;
+        break;
+    case SUB_EXPRESSION:
+        result->u.double_value = left - right;
+        break;
+    case MUL_EXPRESSION:
+        result->u.double_value = left * right;
+        break;
+    case DIV_EXPRESSION:
+        result->u.double_value = left / right;
+        break;
+    case MOD_EXPRESSION:
+        result->u.double_value = fmod(left, right);
+        break;
+    case LOGICAL_AND_EXPRESSION:        /* FALLTHRU */
+    case LOGICAL_OR_EXPRESSION:
+        DBG_panic(("bad case...%d", operator));
+        break;
+    case EQ_EXPRESSION:
+        result->u.int_value = left == right;
+        break;
+    case NE_EXPRESSION:
+        result->u.int_value = left != right;
+        break;
+    case GT_EXPRESSION:
+        result->u.int_value = left > right;
+        break;
+    case GE_EXPRESSION:
+        result->u.int_value = left >= right;
+        break;
+    case LT_EXPRESSION:
+        result->u.int_value = left < right;
+        break;
+    case LE_EXPRESSION:
+        result->u.int_value = left <= right;
+        break;
+    case MINUS_EXPRESSION:              /* FALLTHRU */
+    case FUNCTION_CALL_EXPRESSION:      /* FALLTHRU */
+    case NULL_EXPRESSION:               /* FALLTHRU */
+    case EXPRESSION_TYPE_COUNT_PLUS_1:  /* FALLTHRU */
+    default:
+        DBG_panic(("bad default...%d", operator));
+    }
+}
+
+
+
