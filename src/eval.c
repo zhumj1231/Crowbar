@@ -528,3 +528,37 @@ crb_eval_minus_expression(CRB_Interpreter *inter, LocalEnvironment *env,
     }
     return result;
 }
+
+static LocalEnvironment *
+alloc_local_environment()
+{
+    LocalEnvironment *ret;
+
+    ret = MEM_malloc(sizeof(LocalEnvironment));
+    ret->variable = NULL;
+    ret->global_variable = NULL;
+
+    return ret;
+}
+
+static void
+dispose_local_environment(CRB_Interpreter *inter, LocalEnvironment *env)
+{
+    while (env->variable) {
+        Variable        *temp;
+        temp = env->variable;
+        if (env->variable->value.type == CRB_STRING_VALUE) {
+            crb_release_string(env->variable->value.u.string_value);
+        }
+        env->variable = temp->next;
+        MEM_free(temp);
+    }
+    while (env->global_variable) {
+        GlobalVariableRef *ref;
+        ref = env->global_variable;
+        env->global_variable = ref->next;
+        MEM_free(ref);
+    }
+
+    MEM_free(env);
+}
