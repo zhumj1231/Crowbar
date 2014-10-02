@@ -38,6 +38,17 @@ eval_double_expression(double double_value)
 }
 
 static CRB_Value
+eval_string_expression(CRB_Interpreter *inter, char *string_value)
+{
+    CRB_Value   v;
+
+    v.type = CRB_STRING_VALUE;
+    v.u.string_value = crb_literal_to_crb_string(inter, string_value);
+
+    return v;
+}
+
+static CRB_Value
 eval_null_expression(void)
 {
     CRB_Value   v;
