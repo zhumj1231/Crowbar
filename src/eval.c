@@ -107,3 +107,35 @@ eval_identifier_expression(CRB_Interpreter *inter,
 
     return v;
 }
+
+static CRB_Value eval_expression(CRB_Interpreter *inter, LocalEnvironment *env,
+                                 Expression *expr);
+static CRB_Value
+eval_assign_expression(CRB_Interpreter *inter, LocalEnvironment *env,
+                       char *identifier, Expression *expression)
+{
+    CRB_Value   v;
+    Variable    *left;
+
+    v = eval_expression(inter, env, expression);
+
+    left = crb_search_local_variable(env, identifier);
+    if (left == NULL) {
+        left = search_global_variable_from_env(inter, env, identifier);
+    }
+    if (left != NULL) {
+        release_if_string(&left->value);
+        left->value = v;
+        refer_if_string(&v);
+    } else {
+        if (env != NULL) {
+            crb_add_local_variable(env, identifier, &v);
+        } else {
+            CRB_add_global_variable(inter, identifier, &v);
+        }
+        refer_if_string(&v);
+    }
+
+    return v;
+}
+
