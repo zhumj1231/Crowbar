@@ -31,3 +31,47 @@ crb_search_function(char *name)
     }
     return pos;
 }
+
+void *
+crb_malloc(size_t size)
+{
+    void *p;
+    CRB_Interpreter *inter;
+
+    inter = crb_get_current_interpreter();
+    p = MEM_storage_malloc(inter->interpreter_storage, size);
+
+    return p;
+}
+
+void *
+crb_execute_malloc(CRB_Interpreter *inter, size_t size)
+{
+    void *p;
+
+    p = MEM_storage_malloc(inter->execute_storage, size);
+
+    return p;
+}
+
+void *
+crb_malloc(size_t size)
+{
+    void *p;
+    CRB_Interpreter *inter;
+
+    inter = crb_get_current_interpreter();
+    p = MEM_storage_malloc(inter->interpreter_storage, size);
+
+    return p;
+}
+
+void *
+crb_execute_malloc(CRB_Interpreter *inter, size_t size)
+{
+    void *p;
+
+    p = MEM_storage_malloc(inter->execute_storage, size);
+
+    return p;
+}
