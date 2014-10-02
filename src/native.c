@@ -61,6 +61,38 @@ check_native_pointer(CRB_Value *value)
     return value->u.native_pointer.info == &st_native_lib_info;
 }
 
+CRB_Value crb_nv_fopen_proc(CRB_Interpreter *interpreter,
+                            int arg_count, CRB_Value *args)
+{
+    CRB_Value value;
+    FILE *fp;
+
+    if (arg_count < 2) {
+        crb_runtime_error(0, ARGUMENT_TOO_FEW_ERR,
+                          MESSAGE_ARGUMENT_END);
+    } else if (arg_count > 2) {
+        crb_runtime_error(0, ARGUMENT_TOO_MANY_ERR,
+                          MESSAGE_ARGUMENT_END);
+    }
+    if (args[0].type != CRB_STRING_VALUE
+        || args[1].type != CRB_STRING_VALUE) {
+        crb_runtime_error(0, FOPEN_ARGUMENT_TYPE_ERR,
+                          MESSAGE_ARGUMENT_END);
+    }
+    
+    fp = fopen(args[0].u.string_value->string,
+               args[1].u.string_value->string);
+    if (fp == NULL) {
+        value.type = CRB_NULL_VALUE;
+    } else {
+        value.type = CRB_NATIVE_POINTER_VALUE;
+        value.u.native_pointer.info = &st_native_lib_info;
+        value.u.native_pointer.pointer = fp;
+    }
+
+    return value;
+}
+
 CRB_Value crb_nv_fclose_proc(CRB_Interpreter *interpreter,
                              int arg_count, CRB_Value *args)
 {
