@@ -11,48 +11,6 @@ extern MessageFormat crb_compile_error_message_format[];
 extern MessageFormat crb_runtime_error_message_format[];
 
 typedef struct {
-    char        *string;
-} VString;
-
-static void
-clear_v_string(VString *v)
-{
-    v->string = NULL;
-}
-
-int
-my_strlen(char *str)
-{
-    if (str == NULL) {
-        return 0;
-    }
-    return strlen(str);
-}
-
-static void
-add_string(VString *v, char *str)
-{
-    int new_size;
-    int old_len;
-
-    old_len = my_strlen(v->string);
-    new_size = old_len + strlen(str) + 1;
-    v->string = MEM_realloc(v->string, new_size);
-    strcpy(&v->string[old_len], str);
-}
-
-static void
-add_character(VString *v, int ch)
-{
-    int current_len;
-    
-    current_len = my_strlen(v->string);
-    v->string = MEM_realloc(v->string, current_len + 2);
-    v->string[current_len] = ch;
-    v->string[current_len+1] = '\0';
-}
-
-typedef struct {
     MessageArgumentType type;
     char        *name;
     union {
