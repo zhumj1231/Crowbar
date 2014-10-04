@@ -3,11 +3,12 @@
 #include "crowbar.h"
 #define YYDEBUG 1
 %}
-%union{
+%union {
     char                *identifier;
     ParameterList       *parameter_list;
     ArgumentList        *argument_list;
     Expression          *expression;
+    ExpressionList      *expression_list;
     Statement           *statement;
     StatementList       *statement_list;
     Block               *block;
@@ -19,15 +20,17 @@
 %token <expression>     STRING_LITERAL
 %token <identifier>     IDENTIFIER
 %token FUNCTION IF ELSE ELSIF WHILE FOR RETURN_T BREAK CONTINUE NULL_T
-        LP RP LC RC SEMICOLON COMMA ASSIGN LOGICAL_AND LOGICAL_OR
-        EQ NE GT GE LT LE ADD SUB MUL DIV MOD TRUE_T FALSE_T GLOBAL_T
+        LP RP LC RC LB RB SEMICOLON COMMA ASSIGN LOGICAL_AND LOGICAL_OR
+        EQ NE GT GE LT LE ADD SUB MUL DIV MOD TRUE_T FALSE_T GLOBAL_T DOT
+        INCREMENT DECREMENT
 %type   <parameter_list> parameter_list
 %type   <argument_list> argument_list
 %type   <expression> expression expression_opt
         logical_and_expression logical_or_expression
         equality_expression relational_expression
         additive_expression multiplicative_expression
-        unary_expression primary_expression
+        unary_expression postfix_expression primary_expression array_literal
+%type   <expression_list> expression_list
 %type   <statement> statement global_statement
         if_statement while_statement for_statement
         return_statement break_statement continue_statement
@@ -168,10 +171,33 @@ multiplicative_expression
         }
         ;
 unary_expression
-        : primary_expression
+        : postfix_expression
         | SUB unary_expression
         {
             $$ = crb_create_minus_expression($2);
+        }
+        ;
+postfix_expression
+        : primary_expression
+        | postfix_expression LB expression RB
+        {
+            $$ = crb_create_index_expression($1, $3);
+        }
+        | postfix_expression DOT IDENTIFIER LP argument_list RP
+        {
+            $$ = crb_create_method_call_expression($1, $3, $5);
+        }
+        | postfix_expression DOT IDENTIFIER LP RP
+        {
+            $$ = crb_create_method_call_expression($1, $3, NULL);
+        }
+        | postfix_expression INCREMENT
+        {
+            $$ = crb_create_incdec_expression($1, INCREMENT_EXPRESSION);
+        }
+        | postfix_expression DECREMENT
+        {
+            $$ = crb_create_incdec_expression($1, DECREMENT_EXPRESSION);
         }
         ;
 primary_expression
@@ -205,6 +231,31 @@ primary_expression
         | NULL_T
         {
             $$ = crb_create_null_expression();
+        }
+        | array_literal
+        ;
+array_literal
+        : LC expression_list RC
+        {
+            $$ = crb_create_array_expression($2);
+        }
+        | LC expression_list COMMA RC
+        {
+            $$ = crb_create_array_expression($2);
+        }
+        ;
+expression_list
+        : /* empty */
+        {
+            $$ = NULL;
+        }
+        | expression
+        {
+            $$ = crb_create_expression_list($1);
+        }
+        | expression_list COMMA expression
+        {
+            $$ = crb_chain_expression_list($1, $3);
         }
         ;
 statement
