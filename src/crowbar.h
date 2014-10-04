@@ -444,8 +444,24 @@ CRB_Value crb_eval_expression(CRB_Interpreter *inter,
 
 /* heap.c */
 
-
 /* util.c */
+CRB_Interpreter *crb_get_current_interpreter(void);
+void crb_set_current_interpreter(CRB_Interpreter *inter);
+void *crb_malloc(size_t size);
+void *crb_execute_malloc(CRB_Interpreter *inter, size_t size);
+Variable *crb_search_local_variable(CRB_LocalEnvironment *env,
+                                    char *identifier);
+Variable *
+crb_search_global_variable(CRB_Interpreter *inter, char *identifier);
+Variable *crb_add_local_variable(CRB_LocalEnvironment *env, char *identifier);
+Variable *crb_add_global_variable(CRB_Interpreter *inter, char *identifier);
+CRB_NativeFunctionProc *
+crb_search_native_function(CRB_Interpreter *inter, char *name);
+FunctionDefinition *crb_search_function(char *name);
+char *crb_get_operator_string(ExpressionType type);
+void crb_vstr_clear(VString *v);
+void crb_vstr_append_string(VString *v, char *str);
+void crb_vstr_append_character(VString *v, int ch);
 
 /* error.c */
 void crb_compile_error(CompileError id, ...);
@@ -467,6 +483,9 @@ CRB_Value crb_nv_fgets_proc(CRB_Interpreter *interpreter,
 CRB_Value crb_nv_fputs_proc(CRB_Interpreter *interpreter,
                             CRB_LocalEnvironment *env,
                             int arg_count, CRB_Value *args);
+CRB_Value crb_nv_new_array_proc(CRB_Interpreter *interpreter,
+                                CRB_LocalEnvironment *env,
+                                int arg_count, CRB_Value *args);
 void crb_add_std_fp(CRB_Interpreter *inter);
 
 #endif /* PRIVATE_CROWBAR_H_INCLUDED */
