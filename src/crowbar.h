@@ -429,36 +429,23 @@ char *crb_close_string_literal(void);
 /* execute.c */
 StatementResult
 crb_execute_statement_list(CRB_Interpreter *inter,
-                           LocalEnvironment *env, StatementList *list);
+                           CRB_LocalEnvironment *env, StatementList *list);
 
 /* eval.c */
 CRB_Value crb_eval_binary_expression(CRB_Interpreter *inter,
-                                 LocalEnvironment *env,
-                                 ExpressionType operator,
-                                 Expression *left, Expression *right);
+                                     CRB_LocalEnvironment *env,
+                                     ExpressionType operator,
+                                     Expression *left, Expression *right);
 CRB_Value crb_eval_minus_expression(CRB_Interpreter *inter,
-                                LocalEnvironment *env, Expression *operand);
+                                    CRB_LocalEnvironment *env,
+                                    Expression *operand);
 CRB_Value crb_eval_expression(CRB_Interpreter *inter,
-                          LocalEnvironment *env, Expression *expr);
+                              CRB_LocalEnvironment *env, Expression *expr);
 
 /* heap.c */
 
 
 /* util.c */
-CRB_Interpreter *crb_get_current_interpreter(void);
-void crb_set_current_interpreter(CRB_Interpreter *inter);
-void *crb_malloc(size_t size);
-void *crb_execute_malloc(CRB_Interpreter *inter, size_t size);
-Variable *crb_search_local_variable(LocalEnvironment *env,
-                                    char *identifier);
-Variable *
-crb_search_global_variable(CRB_Interpreter *inter, char *identifier);
-void crb_add_local_variable(LocalEnvironment *env,
-                            char *identifier, CRB_Value *value);
-CRB_NativeFunctionProc *
-crb_search_native_function(CRB_Interpreter *inter, char *name);
-FunctionDefinition *crb_search_function(char *name);
-char *crb_get_operator_string(ExpressionType type);
 
 /* error.c */
 void crb_compile_error(CompileError id, ...);
@@ -466,14 +453,19 @@ void crb_runtime_error(int line_number, RuntimeError id, ...);
 
 /* native.c */
 CRB_Value crb_nv_print_proc(CRB_Interpreter *interpreter,
+                            CRB_LocalEnvironment *env,
                             int arg_count, CRB_Value *args);
 CRB_Value crb_nv_fopen_proc(CRB_Interpreter *interpreter,
+                            CRB_LocalEnvironment *env,
                             int arg_count, CRB_Value *args);
 CRB_Value crb_nv_fclose_proc(CRB_Interpreter *interpreter,
+                            CRB_LocalEnvironment *env,
                              int arg_count, CRB_Value *args);
 CRB_Value crb_nv_fgets_proc(CRB_Interpreter *interpreter,
+                            CRB_LocalEnvironment *env,
                             int arg_count, CRB_Value *args);
 CRB_Value crb_nv_fputs_proc(CRB_Interpreter *interpreter,
+                            CRB_LocalEnvironment *env,
                             int arg_count, CRB_Value *args);
 void crb_add_std_fp(CRB_Interpreter *inter);
 
