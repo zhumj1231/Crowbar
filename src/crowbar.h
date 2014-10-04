@@ -441,6 +441,9 @@ CRB_Value crb_eval_minus_expression(CRB_Interpreter *inter,
 CRB_Value crb_eval_expression(CRB_Interpreter *inter,
                           LocalEnvironment *env, Expression *expr);
 
+/* heap.c */
+
+
 /* util.c */
 CRB_Interpreter *crb_get_current_interpreter(void);
 void crb_set_current_interpreter(CRB_Interpreter *inter);
