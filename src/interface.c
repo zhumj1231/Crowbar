@@ -11,6 +11,7 @@ add_native_functions(CRB_Interpreter *inter)
     CRB_add_native_function(inter, "fclose", crb_nv_fclose_proc);
     CRB_add_native_function(inter, "fgets", crb_nv_fgets_proc);
     CRB_add_native_function(inter, "fputs", crb_nv_fputs_proc);
+    CRB_add_native_function(inter, "new_array", crb_nv_new_array_proc);
 }
 
 CRB_Interpreter *
@@ -28,13 +29,20 @@ CRB_create_interpreter(void)
     interpreter->function_list = NULL;
     interpreter->statement_list = NULL;
     interpreter->current_line_number = 1;
+    interpreter->stack.stack_alloc_size = 0;
+    interpreter->stack.stack_pointer = 0;
+    interpreter->stack.stack
+        = MEM_malloc(sizeof(CRB_Value) * STACK_ALLOC_SIZE);
+    interpreter->heap.current_heap_size = 0;
+    interpreter->heap.current_threshold = HEAP_THRESHOLD_SIZE;
+    interpreter->heap.header = NULL;
+    interpreter->top_environment = NULL;
 
     crb_set_current_interpreter(interpreter);
     add_native_functions(interpreter);
 
     return interpreter;
 }
-
 void
 CRB_compile(CRB_Interpreter *interpreter, FILE *fp)
 {
@@ -45,7 +53,6 @@ CRB_compile(CRB_Interpreter *interpreter, FILE *fp)
 
     yyin = fp;
     if (yyparse()) {
-        /* BUGBUG */
         fprintf(stderr, "Error ! Error ! Error !\n");
         exit(1);
     }
@@ -58,6 +65,7 @@ CRB_interpret(CRB_Interpreter *interpreter)
     interpreter->execute_storage = MEM_open_storage(0);
     crb_add_std_fp(interpreter);
     crb_execute_statement_list(interpreter, NULL, interpreter->statement_list);
+    crb_garbage_collect(interpreter);
 }
 
 static void
@@ -65,9 +73,6 @@ release_global_strings(CRB_Interpreter *interpreter) {
     while (interpreter->variable) {
         Variable *temp = interpreter->variable;
         interpreter->variable = temp->next;
-        if (temp->value.type == CRB_STRING_VALUE) {
-            crb_release_string(temp->value.u.string_value);
-        }
     }
 }
 
@@ -80,6 +85,11 @@ CRB_dispose_interpreter(CRB_Interpreter *interpreter)
         MEM_dispose_storage(interpreter->execute_storage);
     }
 
+    interpreter->variable = NULL;
+    crb_garbage_collect(interpreter);
+    DBG_assert(interpreter->heap.current_heap_size == 0,
+               ("%d bytes leaked.\n", interpreter->heap.current_heap_size));
+    MEM_free(interpreter->stack.stack);
     MEM_dispose_storage(interpreter->interpreter_storage);
 }
 
