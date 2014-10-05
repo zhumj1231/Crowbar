@@ -443,6 +443,13 @@ CRB_Value crb_eval_expression(CRB_Interpreter *inter,
                               CRB_LocalEnvironment *env, Expression *expr);
 
 /* heap.c */
+CRB_Object *crb_literal_to_crb_string(CRB_Interpreter *inter, char *str);
+CRB_Object *crb_create_crowbar_string_i(CRB_Interpreter *inter, char *str);
+CRB_Object *crb_create_array_i(CRB_Interpreter *inter, int size);
+void crb_array_add(CRB_Interpreter *inter, CRB_Object *obj, CRB_Value v);
+void
+crb_array_resize(CRB_Interpreter *inter, CRB_Object *obj, int new_size);
+void crb_garbage_collect(CRB_Interpreter *inter);
 
 /* util.c */
 CRB_Interpreter *crb_get_current_interpreter(void);
