@@ -96,7 +96,7 @@ eval_null_expression(CRB_Interpreter *inter)
 
 static Variable *
 search_global_variable_from_env(CRB_Interpreter *inter,
-                                LocalEnvironment *env, char *name)
+                                CRB_LocalEnvironment *env, char *name)
 {
     GlobalVariableRef *pos;
 
@@ -402,8 +402,8 @@ eval_compare_string(ExpressionType operator,
     CRB_Boolean result;
     int cmp;
 
-    cmp = strcmp(left->u.string_value->string, 
-                right->u.string_value->string);
+    cmp = strcmp(left->u.object->u.string.string,
+                 right->u.object->u.string.string);
 
     if (operator == EQ_EXPRESSION) {
         result = (cmp == 0);

@@ -40,7 +40,7 @@ typedef enum {
     DIVISION_BY_ZERO_ERR,
     GLOBAL_VARIABLE_NOT_FOUND_ERR,
     GLOBAL_STATEMENT_IN_TOPLEVEL_ERR,
-    BAD_OPERATOR_FOR_STRING_ERR
+    BAD_OPERATOR_FOR_STRING_ERR,
     NOT_LVALUE_ERR,
     INDEX_OPERAND_NOT_ARRAY_ERR,
     INDEX_OPERAND_NOT_INT_ERR,
@@ -117,7 +117,7 @@ typedef struct ArgumentList_tag {
 } ArgumentList;
 
 typedef struct {
-    char        *variable;
+    Expression  *left;
     Expression  *operand;
 } AssignExpression;
 
@@ -383,8 +383,8 @@ StatementList *crb_create_statement_list(Statement *statement);
 StatementList *crb_chain_statement_list(StatementList *list,
                                         Statement *statement);
 Expression *crb_alloc_expression(ExpressionType type);
-Expression *crb_create_assign_expression(char *variable,
-                                             Expression *operand);
+Expression *crb_create_assign_expression(Expression *left,
+                                         Expression *operand);
 Expression *crb_create_binary_expression(ExpressionType operator,
                                          Expression *left,
                                          Expression *right);

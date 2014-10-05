@@ -37,13 +37,13 @@ typedef struct {
         CRB_Boolean     boolean_value;
         int             int_value;
         double          double_value;
-        CRB_String      *string_value;
         CRB_NativePointer       native_pointer;
         CRB_Object      *object;
     } u;
 } CRB_Value;
 
 typedef CRB_Value CRB_NativeFunctionProc(CRB_Interpreter *interpreter,
+                                         CRB_LocalEnvironment *env,
                                          int arg_count, CRB_Value *args);
 
 void CRB_add_native_function(CRB_Interpreter *interpreter,

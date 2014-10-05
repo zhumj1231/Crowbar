@@ -138,12 +138,12 @@ crb_alloc_expression(ExpressionType type)
 }
 
 Expression *
-crb_create_assign_expression(char *variable, Expression *operand)
+crb_create_assign_expression(Expression *left, Expression *operand)
 {
     Expression *exp;
 
     exp = crb_alloc_expression(ASSIGN_EXPRESSION);
-    exp->u.assign_expression.variable = variable;
+    exp->u.assign_expression.left = left;
     exp->u.assign_expression.operand = operand;
 
     return exp;
