@@ -91,42 +91,42 @@ i = 0;
 for (;;) {
     print(" i.." + i);
     if (i > 5) {
-	break;
+    break;
     }
     i = i + 1;
 }
 print("\n");
 
-for (i = 0; i < 5; i = i + 1) {
+for (i = 0; i < 5; i++) {
     print("*** i.." + i + "***\n");
     if (i == 0) {
-	print("i == 0\n");
+    print("i == 0\n");
     } elsif (i == 1) {
-	print("i == 1\n");
+    print("i == 1\n");
     } elsif (i == 2) {
-	print("i == 2\n");
+    print("i == 2\n");
     } else {
-	print("i == else\n");
+    print("i == else\n");
     }
     if (i != 3) {
-	print("i != 3\n");
+    print("i != 3\n");
     }
     if (i == 2 || i == 3) {
-	print("i == 2 || i == 3\n");
+    print("i == 2 || i == 3\n");
     }
     for (j = 0; j < 5; j = j + 1) {
-	if (i == 2 && j == 3) {
-	    print("i == 2 && j == " + j + "\n");
-	}
+    if (i == 2 && j == 3) {
+        print("i == 2 && j == " + j + "\n");
+    }
     }
 }
 
-for (i = 0; i <= 5; i = i + 1) {
+for (i = 0; i <= 5; i++) {
     print(" i.." + i);
 }
 print("\n");
 
-for (i = 5; i >= 0; i = i - 1) {
+for (i = 5; i >= 0; i--) {
     print(" i.." + i);
 }
 print("\n");
@@ -141,7 +141,7 @@ print("\n");
 while (i < 10) {
     print(" i.." + i);
     if (i == 5) {
-	break;
+    break;
     }
     i = i + 1;
 }
@@ -151,7 +151,7 @@ i = 0;
 while (i < 10) {
     i = i + 1;
     if (i < 5) {
-	continue;
+    continue;
     }
     print(" i.." + i);
 }
@@ -202,7 +202,6 @@ if (true != true) {
 if (true != false) {
     print("true != false good\n");
 }
-
 ############################################################
 # Check string conversion
 ############################################################
@@ -285,8 +284,8 @@ function hoge(a, b) {
 function int_func() {
     print("int func in\n");
     for (i = 0; i < 10; i = i + 1) {
-	print("i.." + i + "\n");
-	return 1;
+    print("i.." + i + "\n");
+    return 1;
     }
     print("int func out\n");
 }
@@ -294,8 +293,8 @@ function int_func() {
 function real_func() {
     print("real func in\n");
     for (i = 0; i < 10; i = i + 1) {
-	print("i.." + i + "\n");
-	return 0.1;
+    print("i.." + i + "\n");
+    return 0.1;
     }
     print("real func out\n");
 }
@@ -303,8 +302,8 @@ function real_func() {
 function string_func() {
     zzz = "zzz";
     for (i = 0; i < 10; i = i + 1) {
-	print("i.." + i + "\n");
-	return "abc";
+    print("i.." + i + "\n");
+    return "abc";
     }
 }
 
@@ -342,3 +341,72 @@ function gtestfunc2() {
 gtestfunc();
 gtestfunc2();
 print("gtest.." + gtest + "\n");
+
+############################################################
+# array
+############################################################
+a = {1, 2, 3, 4, 5, 6, 7, 8};
+for (i = 0; i < a.size(); i = i + 1) {
+    print("(" + a[i] + ")");
+}
+print(a);
+print("\n");
+print("len.." + "abc".length() + "\n");
+
+for (i = 0; i < 10; i = i + 1) {
+    print("a.size().." + a.size() + "\n");
+    a.add(i);
+}
+
+for (i = 0; i < a.size(); i = i + 1) {
+    print("(" + a[i] + ")");
+}
+print("\n");
+a99 = new_array(9);
+for (i = 0; i < 9; i = i + 1) {
+    a99[i] = new_array(9);
+    for (j = 0; j < 9; j = j + 1) {
+    a99[i][j] = (i+1) * (j+1);
+    }
+}
+dump_a99(a99);
+
+a99 = new_array(9, 9);
+for (i = 0; i < 9; i = i + 1) {
+    for (j = 0; j < 9; j = j + 1) {
+    a99[i][j] = (i+1) * (j+1);
+    }
+}
+dump_a99(a99);
+
+print(a99);
+
+function dump_a99(arg99) {
+    for (i = 0; i < arg99.size(); i = i + 1) {
+    for (j = 0; j < arg99[i].size(); j = j + 1) {
+        print("[" + arg99[i][j] + "] ");
+    }
+    print("\n");
+    }
+}
+
+a2 = {};
+
+# for (i = 0; i < 10000; i = i + 1) {
+#     a2.add(new_array(i % 5));
+#     a2.add(a2);
+# }
+
+print("\n");
+
+a3 = {1, 2, 3, 4, 5};
+a3.resize(20);
+# print("a3.." + a3 + "\n");
+a3.resize(10);
+# print("a3.." + a3 + "\n");
+
+a = {1, 2, 3, "a", {1, 2, {"3", 1.5}}};
+
+print(a);
+print("\n");
+print("a.." + a);
