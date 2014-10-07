@@ -75,7 +75,7 @@ eval_double_expression(CRB_Interpreter *inter, double double_value)
 }
 
 static void
-eval_string_expression(CRB_Interpreter *inter, char *string_value)
+eval_string_expression(CRB_Interpreter *inter, CRB_Char *string_value)
 {
     CRB_Value   v;
 
@@ -402,7 +402,7 @@ eval_compare_string(ExpressionType operator,
     CRB_Boolean result;
     int cmp;
 
-    cmp = strcmp(left->u.object->u.string.string,
+    cmp = CRB_wcscmp(left->u.object->u.string.string,
                  right->u.object->u.string.string);
 
     if (operator == EQ_EXPRESSION) {
@@ -452,20 +452,20 @@ void
 chain_string(CRB_Interpreter *inter, CRB_Value *left, CRB_Value *right,
              CRB_Value *result)
 {
-    char        *right_str;
-    CRB_Object *right_obj;
+    CRB_Char    *right_str;
+    CRB_Object  *right_obj;
     int         len;
-    char        *str;
+    CRB_Char    *str;
 
     right_str = CRB_value_to_string(right);
     right_obj = crb_create_crowbar_string_i(inter, right_str);
 
     result->type = CRB_STRING_VALUE;
-    len = strlen(left->u.object->u.string.string)
-        + strlen(right_obj->u.string.string);
+    len = CRB_wcslen(left->u.object->u.string.string)
+        + CRB_wcslen(right_obj->u.string.string);
     str = MEM_malloc(len + 1);
-    strcpy(str, left->u.object->u.string.string);
-    strcat(str, right_obj->u.string.string);
+    CRB_wcscpy(str, left->u.object->u.string.string);
+    CRB_wcscat(str, right_obj->u.string.string);
     result->u.object = crb_create_crowbar_string_i(inter, str);
 }
 
@@ -846,7 +846,7 @@ eval_method_call_expression(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
                                         expr->u.method_call_expression
                                         .argument, 0);
             result.type = CRB_INT_VALUE;
-            result.u.int_value = strlen(left->u.object->u.string.string);
+            result.u.int_value = CRB_wcslen(left->u.object->u.string.string);
         } else {
             error_flag = CRB_TRUE;
         }

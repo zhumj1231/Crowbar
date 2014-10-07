@@ -211,7 +211,6 @@ my_strlen(CRB_Char *str)
 }
 
 void
-void
 crb_vstr_append_string(VString *v, CRB_Char *str)
 {
     int new_size;

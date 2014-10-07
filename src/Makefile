@@ -12,11 +12,12 @@ OBJS = \
   heap.o\
   util.o\
   native.o\
+  wchar.o\
   error.o\
   error_message.o\
   ./memory/mem.o\
   ./debug/dbg.o
-CFLAGS = -c -g -Wall -Wswitch-enum -ansi -pedantic -DDEBUG
+CFLAGS = -c -g -Wall -Wswitch-enum -ansi -pedantic -DDEBUG -DSHIFT_JIS_SOURCE
 INCLUDES = \
 
 $(TARGET):$(OBJS)
@@ -24,7 +25,7 @@ $(TARGET):$(OBJS)
 	cd ./debug; $(MAKE);
 	$(CC) $(OBJS) -o $@ -lm
 clean:
-	rm -f *.o lex.yy.c y.tab.c y.tab.h *~ *.output $(TARGET)
+	rm -f *.o lex.yy.c y.tab.c y.tab.h *~ y.output $(TARGET)
 y.tab.h : crowbar.y
 	bison --yacc -dv crowbar.y
 y.tab.c : crowbar.y
@@ -43,13 +44,14 @@ lex.yy.o: lex.yy.c crowbar.h MEM.h
 	cd ./debug; $(MAKE);
 ############################################################
 create.o: create.c MEM.h DBG.h crowbar.h CRB.h CRB_dev.h
-error.o: error.c MEM.h crowbar.h CRB.h CRB_dev.h
+error.o: error.c MEM.h DBG.h crowbar.h CRB.h CRB_dev.h
 error_message.o: error_message.c crowbar.h MEM.h CRB.h CRB_dev.h
 eval.o: eval.c MEM.h DBG.h crowbar.h CRB.h CRB_dev.h
 execute.o: execute.c MEM.h DBG.h crowbar.h CRB.h CRB_dev.h
 heap.o: heap.c MEM.h DBG.h crowbar.h CRB.h CRB_dev.h
 interface.o: interface.c MEM.h DBG.h crowbar.h CRB.h CRB_dev.h
 main.o: main.c CRB.h MEM.h
-native.o: native.c MEM.h DBG.h crowbar.h CRB.h CRB_dev.h
+native.o: native.c MEM.h DBG.h CRB_dev.h CRB.h crowbar.h
 string.o: string.c MEM.h crowbar.h CRB.h CRB_dev.h
 util.o: util.c MEM.h DBG.h crowbar.h CRB.h CRB_dev.h
+wchar.o: wchar.c DBG.h crowbar.h MEM.h CRB.h CRB_dev.h
