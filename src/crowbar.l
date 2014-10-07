@@ -17,7 +17,7 @@ increment_line_number(void)
     crb_get_current_interpreter()->current_line_number++;
 }
 %}
-%start COMMENT STRING_LITERAL_STATE
+%start COMMENT STRING_LITERAL_STATE SHIFT_JIS_2ND_CHAR
 %%
 <INITIAL>"function"     return FUNCTION;
 <INITIAL>"if"           return IF;
@@ -114,5 +114,19 @@ increment_line_number(void)
 <STRING_LITERAL_STATE>\\n       crb_add_string_literal('\n');
 <STRING_LITERAL_STATE>\\t       crb_add_string_literal('\t');
 <STRING_LITERAL_STATE>\\\\      crb_add_string_literal('\\');
-<STRING_LITERAL_STATE>.         crb_add_string_literal(yytext[0]);
+<STRING_LITERAL_STATE>.         {
+    Encoding enc = crb_get_current_interpreter()->source_encoding;
+    crb_add_string_literal(yytext[0]);
+    if (enc == SHIFT_JIS_ENCODING
+        && ((((unsigned char*)yytext)[0] >= 0x81
+             && ((unsigned char*)yytext)[0] <= 0x9e)
+            || (((unsigned char*)yytext)[0] >= 0xe0
+                && ((unsigned char*)yytext)[0] <= 0xef))) {
+        BEGIN SHIFT_JIS_2ND_CHAR;
+     }
+}
+<SHIFT_JIS_2ND_CHAR>. {
+    crb_add_string_literal(yytext[0]);
+    BEGIN STRING_LITERAL_STATE;
+}
 %%
