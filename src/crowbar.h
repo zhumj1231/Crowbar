@@ -1,6 +1,7 @@
 #ifndef PRIVATE_CROWBAR_H_INCLUDED
 #define PRIVATE_CROWBAR_H_INCLUDED
 #include <stdio.h>
+#include <wchar.h>
 #include "MEM.h"
 #include "CRB.h"
 #include "CRB_dev.h"
@@ -20,6 +21,8 @@ typedef enum {
     PARSE_ERR = 1,
     CHARACTER_INVALID_ERR,
     FUNCTION_MULTIPLE_DEFINE_ERR,
+    BAD_MULTIBYTE_CHARACTER_IN_COMPILE_ERR,
+    UNEXPECTED_WIDE_STRING_IN_COMPILE_ERR,
     COMPILE_ERROR_COUNT_PLUS_1
 } CompileError;
 
@@ -49,6 +52,8 @@ typedef enum {
     NEW_ARRAY_ARGUMENT_TYPE_ERR,
     INC_DEC_OPERAND_TYPE_ERR,
     ARRAY_RESIZE_ARGUMENT_ERR,
+    BAD_MULTIBYTE_CHARACTER_ERR,
+    UNEXPECTED_WIDE_STRING_ERR,
     RUNTIME_ERROR_COUNT_PLUS_1
 } RuntimeError;
 
@@ -158,7 +163,7 @@ struct Expression_tag {
         CRB_Boolean             boolean_value;
         int                     int_value;
         double                  double_value;
-        char                    *string_value;
+        CRB_Char                *string_value;
         char                    *identifier;
         AssignExpression        assign_expression;
         BinaryExpression        binary_expression;
@@ -321,6 +326,12 @@ typedef struct {
     CRB_Object  *header;
 } Heap;
 
+typedef enum {
+    EUC_ENCODING = 1,
+    SHIFT_JIS_ENCODING,
+    UTF_8_ENCODING
+} Encoding;
+
 struct CRB_Interpreter_tag {
     MEM_Storage         interpreter_storage;
     MEM_Storage         execute_storage;
@@ -331,6 +342,7 @@ struct CRB_Interpreter_tag {
     Stack               stack;
     Heap                heap;
     CRB_LocalEnvironment    *top_environment;
+    Encoding            source_encoding;
 };
 
 struct CRB_Array_tag {
@@ -341,7 +353,7 @@ struct CRB_Array_tag {
 
 struct CRB_String_tag {
     CRB_Boolean is_literal;
-    char        *string;
+    CRB_Char    *string;
 };
 
 typedef enum {
@@ -365,7 +377,7 @@ struct CRB_Object_tag {
 };
 
 typedef struct {
-    char        *string;
+    CRB_Char    *string;
 } VString;
 
 /* create.c */
@@ -424,7 +436,7 @@ char *crb_create_identifier(char *str);
 void crb_open_string_literal(void);
 void crb_add_string_literal(int letter);
 void crb_reset_string_literal_buffer(void);
-char *crb_close_string_literal(void);
+CRB_Char *crb_close_string_literal(void);
 
 /* execute.c */
 StatementResult
@@ -443,8 +455,8 @@ CRB_Value crb_eval_expression(CRB_Interpreter *inter,
                               CRB_LocalEnvironment *env, Expression *expr);
 
 /* heap.c */
-CRB_Object *crb_literal_to_crb_string(CRB_Interpreter *inter, char *str);
-CRB_Object *crb_create_crowbar_string_i(CRB_Interpreter *inter, char *str);
+CRB_Object *crb_literal_to_crb_string(CRB_Interpreter *inter, CRB_Char *str);
+CRB_Object *crb_create_crowbar_string_i(CRB_Interpreter *inter, CRB_Char *str);
 CRB_Object *crb_create_array_i(CRB_Interpreter *inter, int size);
 void crb_array_add(CRB_Interpreter *inter, CRB_Object *obj, CRB_Value v);
 void
@@ -467,8 +479,8 @@ crb_search_native_function(CRB_Interpreter *inter, char *name);
 FunctionDefinition *crb_search_function(char *name);
 char *crb_get_operator_string(ExpressionType type);
 void crb_vstr_clear(VString *v);
-void crb_vstr_append_string(VString *v, char *str);
-void crb_vstr_append_character(VString *v, int ch);
+void crb_vstr_append_string(VString *v, CRB_Char *str);
+void crb_vstr_append_character(VString *v, CRB_Char ch);
 
 /* error.c */
 void crb_compile_error(CompileError id, ...);
