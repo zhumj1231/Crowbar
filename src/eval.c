@@ -463,9 +463,10 @@ chain_string(CRB_Interpreter *inter, CRB_Value *left, CRB_Value *right,
     result->type = CRB_STRING_VALUE;
     len = CRB_wcslen(left->u.object->u.string.string)
         + CRB_wcslen(right_obj->u.string.string);
-    str = MEM_malloc(len + 1);
+    str = MEM_malloc(sizeof(CRB_Char) * (len + 1));
     CRB_wcscpy(str, left->u.object->u.string.string);
     CRB_wcscat(str, right_obj->u.string.string);
+    CRB_print_wcs_ln(stderr, str);
     result->u.object = crb_create_crowbar_string_i(inter, str);
 }
 
