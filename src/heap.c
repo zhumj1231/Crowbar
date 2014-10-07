@@ -10,6 +10,7 @@ check_gc(CRB_Interpreter *inter)
 #if 0
     crb_garbage_collect(inter);
 #endif
+    
     if (inter->heap.current_heap_size > inter->heap.current_threshold) {
         /* fprintf(stderr, "garbage collecting..."); */
         crb_garbage_collect(inter);
@@ -52,7 +53,7 @@ add_ref_in_native_method(CRB_LocalEnvironment *env, CRB_Object *obj)
 }
 
 CRB_Object *
-crb_literal_to_crb_string(CRB_Interpreter *inter, char *str)
+crb_literal_to_crb_string(CRB_Interpreter *inter, CRB_Char *str)
 {
     CRB_Object *ret;
 
@@ -64,13 +65,13 @@ crb_literal_to_crb_string(CRB_Interpreter *inter, char *str)
 }
 
 CRB_Object *
-crb_create_crowbar_string_i(CRB_Interpreter *inter, char *str)
+crb_create_crowbar_string_i(CRB_Interpreter *inter, CRB_Char *str)
 {
     CRB_Object *ret;
 
     ret = alloc_object(inter, STRING_OBJECT);
     ret->u.string.string = str;
-    inter->heap.current_heap_size += strlen(str) + 1;
+    inter->heap.current_heap_size += sizeof(CRB_Char) * (CRB_wcslen(str) + 1);
     ret->u.string.is_literal = CRB_FALSE;
 
     return ret;
@@ -78,7 +79,7 @@ crb_create_crowbar_string_i(CRB_Interpreter *inter, char *str)
 
 CRB_Object *
 CRB_create_crowbar_string(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
-                          char *str)
+                          CRB_Char *str)
 {
     CRB_Object *ret;
 
@@ -255,7 +256,8 @@ gc_dispose_object(CRB_Interpreter *inter, CRB_Object *obj)
         break;
     case STRING_OBJECT:
         if (!obj->u.string.is_literal) {
-            inter->heap.current_heap_size -= strlen(obj->u.string.string) + 1;
+            inter->heap.current_heap_size
+                -= sizeof(CRB_Char) * (CRB_wcslen(obj->u.string.string) + 1);
             MEM_free(obj->u.string.string);
         }
         break;

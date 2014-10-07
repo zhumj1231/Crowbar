@@ -29,13 +29,13 @@ crb_nv_print_proc(CRB_Interpreter *interpreter,
                   int arg_count, CRB_Value *args)
 {
     CRB_Value value;
-    char *str;
+    CRB_Char *str;
 
     value.type = CRB_NULL_VALUE;
 
     check_argument_count(arg_count, 1);
     str = CRB_value_to_string(&args[0]);
-    printf("%s", str);
+    CRB_print_wcs(stdout, str);
     MEM_free(str);
 
     return value;
@@ -47,6 +47,8 @@ crb_nv_fopen_proc(CRB_Interpreter *interpreter,
                   int arg_count, CRB_Value *args)
 {
     CRB_Value value;
+    char *filename;
+    char *mode;
     FILE *fp;
 
     check_argument_count(arg_count, 2);
@@ -56,9 +58,11 @@ crb_nv_fopen_proc(CRB_Interpreter *interpreter,
         crb_runtime_error(0, FOPEN_ARGUMENT_TYPE_ERR,
                           MESSAGE_ARGUMENT_END);
     }
+
+    filename = CRB_wcstombs_alloc(args[0].u.object->u.string.string);
+    mode = CRB_wcstombs_alloc(args[1].u.object->u.string.string);
     
-    fp = fopen(args[0].u.object->u.string.string,
-               args[1].u.object->u.string.string);
+    fp = fopen(filename, mode);
     if (fp == NULL) {
         value.type = CRB_NULL_VALUE;
     } else {
@@ -66,6 +70,8 @@ crb_nv_fopen_proc(CRB_Interpreter *interpreter,
         value.u.native_pointer.info = &st_native_lib_info;
         value.u.native_pointer.pointer = fp;
     }
+    MEM_free(filename);
+    MEM_free(mode);
 
     return value;
 }
@@ -106,8 +112,9 @@ crb_nv_fgets_proc(CRB_Interpreter *interpreter,
     CRB_Value value;
     FILE *fp;
     char buf[LINE_BUF_SIZE];
-    char *ret_buf = NULL;
+    char *mb_buf = NULL;
     int ret_len = 0;
+    CRB_Char *wc_str;
 
     check_argument_count(arg_count, 1);
 
@@ -121,22 +128,30 @@ crb_nv_fgets_proc(CRB_Interpreter *interpreter,
     while (fgets(buf, LINE_BUF_SIZE, fp)) {
         int new_len;
         new_len = ret_len + strlen(buf);
-        ret_buf = MEM_realloc(ret_buf, new_len + 1);
+        mb_buf = MEM_realloc(mb_buf, new_len + 1);
         if (ret_len == 0) {
-            strcpy(ret_buf, buf);
+            strcpy(mb_buf, buf);
         } else {
-            strcat(ret_buf, buf);
+            strcat(mb_buf, buf);
         }
         ret_len = new_len;
-        if (ret_buf[ret_len-1] == '\n')
+        if (mb_buf[ret_len-1] == '\n')
             break;
     }
     if (ret_len > 0) {
+        wc_str = CRB_mbstowcs_alloc(interpreter, env, __LINE__, mb_buf);
+        if (wc_str == NULL) {
+            MEM_free(mb_buf);
+            crb_runtime_error(0,
+                              BAD_MULTIBYTE_CHARACTER_ERR,
+                              MESSAGE_ARGUMENT_END);
+        }
         value.type = CRB_STRING_VALUE;
-        value.u.object = CRB_create_crowbar_string(interpreter, env, ret_buf);
+        value.u.object = CRB_create_crowbar_string(interpreter, env, wc_str);
     } else {
         value.type = CRB_NULL_VALUE;
     }
+    MEM_free(mb_buf);
 
     return value;
 }
@@ -159,7 +174,7 @@ crb_nv_fputs_proc(CRB_Interpreter *interpreter,
     }
     fp = args[1].u.native_pointer.pointer;
 
-    fputs(args[0].u.object->u.string.string, fp);
+    CRB_print_wcs(fp, args[0].u.object->u.string.string);
 
     return value;
 }

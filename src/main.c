@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <locale.h>
 #include "CRB.h"
 #include "MEM.h"
 
@@ -18,6 +19,7 @@ main(int argc, char **argv)
         fprintf(stderr, "%s not found.\n", argv[1]);
         exit(1);
     }
+    setlocale(LC_CTYPE, "");
     interpreter = CRB_create_interpreter();
     CRB_compile(interpreter, fp);
     CRB_interpret(interpreter);

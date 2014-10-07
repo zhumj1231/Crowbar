@@ -38,11 +38,26 @@ CRB_create_interpreter(void)
     interpreter->heap.header = NULL;
     interpreter->top_environment = NULL;
 
+#ifdef EUC_SOURCE
+    interpreter->source_encoding = EUC_ENCODING;
+#else
+#ifdef SHIFT_JIS_SOURCE
+    interpreter->source_encoding = SHIFT_JIS_ENCODING;
+#else
+#ifdef UTF_8_SOURCE
+    interpreter->source_encoding = UTF_8_ENCODING;
+#else
+    DBG_panic(("source encoding is not defined.\n"));
+#endif
+#endif
+#endif
+
     crb_set_current_interpreter(interpreter);
     add_native_functions(interpreter);
 
     return interpreter;
 }
+
 void
 CRB_compile(CRB_Interpreter *interpreter, FILE *fp)
 {

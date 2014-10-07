@@ -37,15 +37,20 @@ crb_reset_string_literal_buffer(void)
     st_string_literal_buffer_alloc_size = 0;
 }
 
-char *
+CRB_Char *
 crb_close_string_literal(void)
 {
-    char *new_str;
+    CRB_Char *new_str;
+    int new_str_len;
 
-    new_str = crb_malloc(st_string_literal_buffer_size + 1);
-
-    memcpy(new_str, st_string_literal_buffer, st_string_literal_buffer_size);
-    new_str[st_string_literal_buffer_size] = '\0';
+    crb_add_string_literal('\0');
+    new_str_len = CRB_mbstowcs_len(st_string_literal_buffer);
+    if (new_str_len < 0) {
+        crb_compile_error(BAD_MULTIBYTE_CHARACTER_IN_COMPILE_ERR,
+                          MESSAGE_ARGUMENT_END);
+    }
+    new_str = crb_malloc(sizeof(CRB_Char) * (new_str_len+1));
+    CRB_mbstowcs(st_string_literal_buffer, new_str);
 
     return new_str;
 }
