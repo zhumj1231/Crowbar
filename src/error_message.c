@@ -6,6 +6,8 @@ MessageFormat crb_compile_error_message_format[] = {
     {"在($(token))附近发生语法错误"},
     {"不正确的字符($(bad_char))"},
     {"函数名重复($(name))"},
+    {"不正确的多字节字符。"},
+    {"预期外的宽字符串。"},
     {"dummy"},
 };
 
@@ -38,5 +40,7 @@ MessageFormat crb_runtime_error_message_format[] = {
     {"请为new_array()函数传入整数类型（数组的大小）。"},
     {"自增/自减的目标值不是整数类型。"},
     {"数组的resize()必须传入整数类型。"},
+    {"不正确的对字节字符。"},
+    {"预期外的宽字符串。"},
     {"dummy"},
 };

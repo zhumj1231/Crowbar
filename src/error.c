@@ -74,52 +74,60 @@ search_argument(MessageArgument *arg_list,
 }
 
 static void
-format_message(MessageFormat *format, VString *v, va_list ap)
+format_message(int line_number, MessageFormat *format, VString *v, va_list ap)
 {
     int         i;
     char        buf[LINE_BUF_SIZE];
+    CRB_Char    wc_buf[LINE_BUF_SIZE];
     int         arg_name_index;
     char        arg_name[LINE_BUF_SIZE];
     MessageArgument     arg[MESSAGE_ARGUMENT_MAX];
     MessageArgument     cur_arg;
+    CRB_Char    *wc_format;
 
     create_message_argument(arg, ap);
+    wc_format = CRB_mbstowcs_alloc(NULL, NULL, line_number, format->format);
+    DBG_assert(wc_format != NULL, ("wc_format is null.\n"));
 
-    for (i = 0; format->format[i] != '\0'; i++) {
-        if (format->format[i] != '$') {
-            crb_vstr_append_character(v, format->format[i]);
+    for (i = 0; wc_format[i] != L'\0'; i++) {
+        if (wc_format[i] != L'$') {
+            crb_vstr_append_character(v, wc_format[i]);
             continue;
         }
-        assert(format->format[i+1] == '(');
+        assert(wc_format[i + 1] == L'(');
         i += 2;
-        for (arg_name_index = 0; format->format[i] != ')';
+        for (arg_name_index = 0; wc_format[i] != L')';
              arg_name_index++, i++) {
-            arg_name[arg_name_index] = format->format[i];
+            arg_name[arg_name_index] = CRB_wctochar(wc_format[i]);
         }
         arg_name[arg_name_index] = '\0';
-        assert(format->format[i] == ')');
+        assert(wc_format[i] == L')');
 
         search_argument(arg, arg_name, &cur_arg);
         switch (cur_arg.type) {
         case INT_MESSAGE_ARGUMENT:
             sprintf(buf, "%d", cur_arg.u.int_val);
-            crb_vstr_append_string(v, buf);
+            CRB_mbstowcs(buf, wc_buf);
+            crb_vstr_append_string(v, wc_buf);
             break;
         case DOUBLE_MESSAGE_ARGUMENT:
             sprintf(buf, "%f", cur_arg.u.double_val);
-            crb_vstr_append_string(v, buf);
+            CRB_mbstowcs(buf, wc_buf);
+            crb_vstr_append_string(v, wc_buf);
             break;
         case STRING_MESSAGE_ARGUMENT:
-            strcpy(buf, cur_arg.u.string_val);
-            crb_vstr_append_string(v, cur_arg.u.string_val);
+            CRB_mbstowcs(cur_arg.u.string_val, wc_buf);
+            crb_vstr_append_string(v, wc_buf);
             break;
         case POINTER_MESSAGE_ARGUMENT:
             sprintf(buf, "%p", cur_arg.u.pointer_val);
-            crb_vstr_append_string(v, buf);
+            CRB_mbstowcs(buf, wc_buf);
+            crb_vstr_append_string(v, wc_buf);
             break;
         case CHARACTER_MESSAGE_ARGUMENT:
             sprintf(buf, "%c", cur_arg.u.character_val);
-            crb_vstr_append_string(v, buf);
+            CRB_mbstowcs(buf, wc_buf);
+            crb_vstr_append_string(v, wc_buf);
             break;
         case MESSAGE_ARGUMENT_END:
             assert(0);
@@ -128,6 +136,7 @@ format_message(MessageFormat *format, VString *v, va_list ap)
             assert(0);
         }
     }
+    MEM_free(wc_format);
 }
 
 void
@@ -166,9 +175,11 @@ crb_compile_error(CompileError id, ...)
     va_start(ap, id);
     line_number = crb_get_current_interpreter()->current_line_number;
     crb_vstr_clear(&message);
-    format_message(&crb_compile_error_message_format[id],
+    format_message(line_number,
+                   &crb_compile_error_message_format[id],
                    &message, ap);
-    fprintf(stderr, "%3d:%s\n", line_number, message.string);
+    fprintf(stderr, "%3d:", line_number);
+    CRB_print_wcs_ln(stderr, message.string);
     va_end(ap);
 
     exit(1);
@@ -183,9 +194,11 @@ crb_runtime_error(int line_number, RuntimeError id, ...)
     self_check();
     va_start(ap, id);
     crb_vstr_clear(&message);
-    format_message(&crb_runtime_error_message_format[id],
+    format_message(line_number,
+                   &crb_runtime_error_message_format[id],
                    &message, ap);
-    fprintf(stderr, "%3d:%s\n", line_number, message.string);
+    fprintf(stderr, "%3d:", line_number);
+    CRB_print_wcs_ln(stderr, message.string);
     va_end(ap);
 
     exit(1);
