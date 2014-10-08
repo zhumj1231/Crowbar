@@ -47,7 +47,7 @@ crb_close_string_literal(void)
     new_str_len = CRB_mbstowcs_len(st_string_literal_buffer);
     if (new_str_len < 0) {
         crb_compile_error(BAD_MULTIBYTE_CHARACTER_IN_COMPILE_ERR,
-                          MESSAGE_ARGUMENT_END);
+                          CRB_MESSAGE_ARGUMENT_END);
     }
     new_str = crb_malloc(sizeof(CRB_Char) * (new_str_len+1));
     CRB_mbstowcs(st_string_literal_buffer, new_str);
@@ -65,4 +65,18 @@ crb_create_identifier(char *str)
     strcpy(new_str, str);
 
     return new_str;
+}
+
+static char st_regexp_start_char;
+
+void
+crb_set_regexp_start_char(char ch)
+{
+    st_regexp_start_char = ch;
+}
+
+char
+crb_regexp_start_char(void)
+{
+    return st_regexp_start_char;
 }

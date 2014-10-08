@@ -81,9 +81,9 @@ CRB_mbstowcs_alloc(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
 
     len = CRB_mbstowcs_len(src);
     if (len < 0) {
-        crb_runtime_error(line_number,
+        crb_runtime_error(inter, env, line_number,
                           BAD_MULTIBYTE_CHARACTER_ERR,
-                          MESSAGE_ARGUMENT_END);
+                          CRB_MESSAGE_ARGUMENT_END);
         return NULL;
     }
     ret = MEM_malloc(sizeof(CRB_Char) * (len+1));
