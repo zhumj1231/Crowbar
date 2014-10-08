@@ -254,9 +254,9 @@ typedef struct StatementList_tag {
     struct StatementList_tag    *next;
 } StatementList;
 
-typedef struct {
+struct CRB_Block_tag {
     StatementList       *statement_list;
-} Block;
+};
 
 typedef struct IdentifierList_tag {
     char        *name;
@@ -269,21 +269,21 @@ typedef struct {
 
 typedef struct Elsif_tag {
     Expression  *condition;
-    Block       *block;
+    CRB_Block   *block;
     struct Elsif_tag    *next;
 } Elsif;
 
 typedef struct {
     Expression  *condition;
-    Block       *then_block;
+    CRB_Block   *then_block;
     Elsif       *elsif_list;
-    Block       *else_block;
+    CRB_Block   *else_block;
 } IfStatement;
 
 typedef struct {
     char        *label;
     Expression  *condition;
-    Block       *block;
+    CRB_Block   *block;
 } WhileStatement;
 
 typedef struct {
@@ -291,7 +291,7 @@ typedef struct {
     Expression  *init;
     Expression  *condition;
     Expression  *post;
-    Block       *block;
+    CRB_Block   *block;
 } ForStatement;
 
 typedef struct {

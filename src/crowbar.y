@@ -5,38 +5,46 @@
 %}
 %union {
     char                *identifier;
-    ParameterList       *parameter_list;
+    CRB_ParameterList   *parameter_list;
     ArgumentList        *argument_list;
     Expression          *expression;
     ExpressionList      *expression_list;
     Statement           *statement;
     StatementList       *statement_list;
-    Block               *block;
+    CRB_Block           *block;
     Elsif               *elsif;
+    AssignmentOperator  assignment_operator;
     IdentifierList      *identifier_list;
 }
 %token <expression>     INT_LITERAL
 %token <expression>     DOUBLE_LITERAL
 %token <expression>     STRING_LITERAL
+%token <expression>     REGEXP_LITERAL
 %token <identifier>     IDENTIFIER
-%token FUNCTION IF ELSE ELSIF WHILE FOR RETURN_T BREAK CONTINUE NULL_T
-        LP RP LC RC LB RB SEMICOLON COMMA ASSIGN LOGICAL_AND LOGICAL_OR
-        EQ NE GT GE LT LE ADD SUB MUL DIV MOD TRUE_T FALSE_T GLOBAL_T DOT
-        INCREMENT DECREMENT
+%token FUNCTION IF ELSE ELSIF WHILE FOR FOREACH RETURN_T BREAK CONTINUE NULL_T
+        LP RP LC RC LB RB SEMICOLON COLON COMMA ASSIGN_T LOGICAL_AND LOGICAL_OR
+        EQ NE GT GE LT LE ADD SUB MUL DIV MOD TRUE_T FALSE_T EXCLAMATION DOT
+        ADD_ASSIGN_T SUB_ASSIGN_T MUL_ASSIGN_T DIV_ASSIGN_T MOD_ASSIGN_T
+        INCREMENT DECREMENT CLOSURE GLOBAL_T TRY CATCH FINALLY THROW
+        FINAL
 %type   <parameter_list> parameter_list
 %type   <argument_list> argument_list
 %type   <expression> expression expression_opt
-        logical_and_expression logical_or_expression
+        assignment_expression logical_and_expression logical_or_expression
         equality_expression relational_expression
         additive_expression multiplicative_expression
         unary_expression postfix_expression primary_expression array_literal
+        closure_definition
 %type   <expression_list> expression_list
 %type   <statement> statement global_statement
-        if_statement while_statement for_statement
-        return_statement break_statement continue_statement
+        if_statement while_statement for_statement foreach_statement
+        return_statement break_statement continue_statement try_statement
+        throw_statement
 %type   <statement_list> statement_list
 %type   <block> block
 %type   <elsif> elsif elsif_list
+%type   <assignment_operator> assignment_operator
+%type   <identifier> identifier_opt label_opt
 %type   <identifier_list> identifier_list
 %%
 translation_unit
@@ -74,11 +82,11 @@ parameter_list
         }
         ;
 argument_list
-        : expression
+        : assignment_expression
         {
             $$ = crb_create_argument_list($1);
         }
-        | argument_list COMMA expression
+        | argument_list COMMA assignment_expression
         {
             $$ = crb_chain_argument_list($1, $3);
         }
@@ -94,10 +102,47 @@ statement_list
         }
         ;
 expression
-        : logical_or_expression
-        | postfix_expression ASSIGN expression
+        : assignment_expression
+        | expression COMMA assignment_expression
         {
-            $$ = crb_create_assign_expression($1, $3);
+            $$ = crb_create_comma_expression($1, $3);
+        }
+        ;
+assignment_expression
+        : logical_or_expression
+        | postfix_expression assignment_operator assignment_expression
+        {
+            $$ = crb_create_assign_expression(CRB_FALSE, $1, $2, $3);
+        }
+        | FINAL postfix_expression assignment_operator assignment_expression
+        {
+            $$ = crb_create_assign_expression(CRB_TRUE, $2, $3, $4);
+        }
+        ;
+assignment_operator
+        : ASSIGN_T
+        {
+            $$ = NORMAL_ASSIGN;
+        }
+        | ADD_ASSIGN_T
+        {
+            $$ = ADD_ASSIGN;
+        }
+        | SUB_ASSIGN_T
+        {
+            $$ = SUB_ASSIGN;
+        }
+        | MUL_ASSIGN_T
+        {
+            $$ = MUL_ASSIGN;
+        }
+        | DIV_ASSIGN_T
+        {
+            $$ = DIV_ASSIGN;
+        }
+        | MOD_ASSIGN_T
+        {
+            $$ = MOD_ASSIGN;
         }
         ;
 logical_or_expression
@@ -176,6 +221,10 @@ unary_expression
         {
             $$ = crb_create_minus_expression($2);
         }
+        | EXCLAMATION unary_expression
+        {
+            $$ = crb_create_logical_not_expression($2);
+        }
         ;
 postfix_expression
         : primary_expression
@@ -183,13 +232,17 @@ postfix_expression
         {
             $$ = crb_create_index_expression($1, $3);
         }
-        | postfix_expression DOT IDENTIFIER LP argument_list RP
+        | postfix_expression DOT IDENTIFIER
         {
-            $$ = crb_create_method_call_expression($1, $3, $5);
+            $$ = crb_create_member_expression($1, $3);
         }
-        | postfix_expression DOT IDENTIFIER LP RP
+        | postfix_expression LP argument_list RP
         {
-            $$ = crb_create_method_call_expression($1, $3, NULL);
+            $$ = crb_create_function_call_expression($1, $3);
+        }
+        | postfix_expression LP RP
+        {
+            $$ = crb_create_function_call_expression($1, NULL);
         }
         | postfix_expression INCREMENT
         {
@@ -201,15 +254,7 @@ postfix_expression
         }
         ;
 primary_expression
-        : IDENTIFIER LP argument_list RP
-        {
-            $$ = crb_create_function_call_expression($1, $3);
-        }
-        | IDENTIFIER LP RP
-        {
-            $$ = crb_create_function_call_expression($1, NULL);
-        }
-        | LP expression RP
+        : LP expression RP
         {
             $$ = $2;
         }
@@ -220,6 +265,7 @@ primary_expression
         | INT_LITERAL
         | DOUBLE_LITERAL
         | STRING_LITERAL
+        | REGEXP_LITERAL
         | TRUE_T
         {
             $$ = crb_create_boolean_expression(CRB_TRUE);
@@ -233,6 +279,7 @@ primary_expression
             $$ = crb_create_null_expression();
         }
         | array_literal
+        | closure_definition
         ;
 array_literal
         : LC expression_list RC
@@ -244,16 +291,34 @@ array_literal
             $$ = crb_create_array_expression($2);
         }
         ;
+closure_definition
+        : CLOSURE IDENTIFIER LP parameter_list RP block
+        {
+            $$ = crb_create_closure_definition($2, $4, $6);
+        }
+        | CLOSURE IDENTIFIER LP RP block
+        {
+            $$ = crb_create_closure_definition($2, NULL, $5);
+        }
+        | CLOSURE LP parameter_list RP block
+        {
+            $$ = crb_create_closure_definition(NULL, $3, $5);
+        }
+        | CLOSURE LP RP block
+        {
+            $$ = crb_create_closure_definition(NULL, NULL, $4);
+        }
+        ;
 expression_list
         : /* empty */
         {
             $$ = NULL;
         }
-        | expression
+        | assignment_expression
         {
             $$ = crb_create_expression_list($1);
         }
-        | expression_list COMMA expression
+        | expression_list COMMA assignment_expression
         {
             $$ = crb_chain_expression_list($1, $3);
         }
@@ -267,9 +332,12 @@ statement
         | if_statement
         | while_statement
         | for_statement
+        | foreach_statement
         | return_statement
         | break_statement
         | continue_statement
+        | try_statement
+        | throw_statement
         ;
 global_statement
         : GLOBAL_T identifier_list SEMICOLON
@@ -318,17 +386,33 @@ elsif
             $$ = crb_create_elsif($3, $5);
         }
         ;
-while_statement
-        : WHILE LP expression RP block
+label_opt
+        : /* empty */
         {
-            $$ = crb_create_while_statement($3, $5);
+            $$ = NULL;
+        }
+        | IDENTIFIER COLON
+        {
+            $$ = $1;
+        }
+        ;
+while_statement
+        : label_opt WHILE LP expression RP block
+        {
+            $$ = crb_create_while_statement($1, $4, $6);
         }
         ;
 for_statement
-        : FOR LP expression_opt SEMICOLON expression_opt SEMICOLON
+        : label_opt FOR LP expression_opt SEMICOLON expression_opt SEMICOLON
           expression_opt RP block
         {
-            $$ = crb_create_for_statement($3, $5, $7, $9);
+            $$ = crb_create_for_statement($1, $4, $6, $8, $10);
+        }
+        ;
+foreach_statement
+        : label_opt FOREACH LP IDENTIFIER COLON expression RP block
+        {
+            $$ = crb_create_foreach_statement($1, $4, $6, $8);
         }
         ;
 expression_opt
@@ -344,18 +428,43 @@ return_statement
             $$ = crb_create_return_statement($2);
         }
         ;
-break_statement
-        : BREAK SEMICOLON
+identifier_opt
+        : /* empty */
         {
-            $$ = crb_create_break_statement();
+            $$ = NULL;
+        }
+        | IDENTIFIER
+        ;
+break_statement 
+        : BREAK identifier_opt SEMICOLON
+        {
+            $$ = crb_create_break_statement($2);
         }
         ;
 continue_statement
-        : CONTINUE SEMICOLON
+        : CONTINUE identifier_opt SEMICOLON
         {
-            $$ = crb_create_continue_statement();
+            $$ = crb_create_continue_statement($2);
         }
         ;
+try_statement
+        : TRY block CATCH LP IDENTIFIER RP block FINALLY block
+        {
+            $$ = crb_create_try_statement($2, $5, $7, $9);
+        }
+        | TRY block FINALLY block
+        {
+            $$ = crb_create_try_statement($2, NULL, NULL, $4);
+        }
+        | TRY block CATCH LP IDENTIFIER RP block
+        {
+            $$ = crb_create_try_statement($2, $5, $7, NULL);
+        }
+throw_statement
+        : THROW expression SEMICOLON
+        {
+            $$ = crb_create_throw_statement($2);
+        }
 block
         : LC statement_list RC
         {
