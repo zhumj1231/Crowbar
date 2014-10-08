@@ -281,11 +281,13 @@ typedef struct {
 } IfStatement;
 
 typedef struct {
+    char        *label;
     Expression  *condition;
     Block       *block;
 } WhileStatement;
 
 typedef struct {
+    char        *label;
     Expression  *init;
     Expression  *condition;
     Expression  *post;
@@ -293,8 +295,34 @@ typedef struct {
 } ForStatement;
 
 typedef struct {
+    char        *label;
+    char        *variable;
+    Expression  *collection;
+    CRB_Block   *block;
+} ForeachStatement;
+
+typedef struct {
     Expression *return_value;
 } ReturnStatement;
+
+typedef struct {
+    char        *label;
+} BreakStatement;
+
+typedef struct {
+    char        *label;
+} ContinueStatement;
+
+typedef struct {
+    CRB_Block   *try_block;
+    CRB_Block   *catch_block;
+    char        *exception;
+    CRB_Block   *finally_block;
+} TryStatement;
+
+typedef struct {
+    Expression  *exception;
+} ThrowStatement;
 
 typedef enum {
     EXPRESSION_STATEMENT = 1,
@@ -302,9 +330,12 @@ typedef enum {
     IF_STATEMENT,
     WHILE_STATEMENT,
     FOR_STATEMENT,
+    FOREACH_STATEMENT,
     RETURN_STATEMENT,
     BREAK_STATEMENT,
     CONTINUE_STATEMENT,
+    TRY_STATEMENT,
+    THROW_STATEMENT,
     STATEMENT_TYPE_COUNT_PLUS_1
 } StatementType;
 
@@ -317,37 +348,22 @@ struct Statement_tag {
         IfStatement     if_s;
         WhileStatement  while_s;
         ForStatement    for_s;
+        ForeachStatement        foreach_s;
+        BreakStatement  break_s;
+        ContinueStatement       continue_s;
         ReturnStatement return_s;
+        TryStatement    try_s;
+        ThrowStatement  throw_s;
     } u;
 };
 
-typedef struct ParameterList_tag {
+struct CRB_ParameterList_tag {
     char        *name;
-    struct ParameterList_tag *next;
-} ParameterList;
-
-typedef enum {
-    CROWBAR_FUNCTION_DEFINITION = 1,
-    NATIVE_FUNCTION_DEFINITION,
-    FUNCTION_DEFINITION_TYPE_COUNT_PLUS_1
-} FunctionDefinitionType;
-
-typedef struct FunctionDefinition_tag {
-    char                *name;
-    FunctionDefinitionType      type;
-    union {
-        struct {
-            ParameterList       *parameter;
-            Block               *block;
-        } crowbar_f;
-        struct {
-            CRB_NativeFunctionProc      *proc;
-        } native_f;
-    } u;
-    struct FunctionDefinition_tag       *next;
-} FunctionDefinition;
+    struct CRB_ParameterList_tag *next;
+};
 
 typedef struct Variable_tag {
+    CRB_Boolean is_final;
     char        *name;
     CRB_Value   value;
     struct Variable_tag *next;
@@ -365,10 +381,12 @@ typedef struct {
     StatementResultType type;
     union {
         CRB_Value       return_value;
+        char            *label;
     } u;
 } StatementResult;
 
 typedef struct GlobalVariableRef_tag {
+    char        *name;
     Variable    *variable;
     struct GlobalVariableRef_tag *next;
 } GlobalVariableRef;
@@ -379,10 +397,12 @@ typedef struct RefInNativeFunc_tag {
 } RefInNativeFunc;
 
 struct CRB_LocalEnvironment_tag {
-    Variable            *variable;
+    char                *current_function_name;
+    int                 caller_line_number;
+    CRB_Object          *variable;      /* ScopeChain */
     GlobalVariableRef   *global_variable;
     RefInNativeFunc     *ref_in_native_method;
-    struct CRB_LocalEnvironment_tag *next;
+    struct CRB_LocalEnvironment_tag     *next;
 };
 
 typedef struct {
@@ -396,6 +416,10 @@ typedef struct {
     int         current_threshold;
     CRB_Object  *header;
 } Heap;
+
+typedef struct {
+    jmp_buf     environment;
+} RecoveryEnvironment;
 
 typedef enum {
     EUC_ENCODING = 1,
