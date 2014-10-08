@@ -105,19 +105,6 @@ typedef enum {
     RUNTIME_ERROR_COUNT_PLUS_1
 } RuntimeError;
 
-typedef enum {
-    INT_MESSAGE_ARGUMENT = 1,
-    DOUBLE_MESSAGE_ARGUMENT,
-    STRING_MESSAGE_ARGUMENT,
-    CHARACTER_MESSAGE_ARGUMENT,
-    POINTER_MESSAGE_ARGUMENT,
-    MESSAGE_ARGUMENT_END
-} MessageArgumentType;
-
-typedef struct {
-    char *format;
-} MessageFormat;
-
 typedef struct Expression_tag Expression;
 
 typedef enum {
@@ -125,7 +112,9 @@ typedef enum {
     INT_EXPRESSION,
     DOUBLE_EXPRESSION,
     STRING_EXPRESSION,
+    REGEXP_EXPRESSION,
     IDENTIFIER_EXPRESSION,
+    COMMA_EXPRESSION,
     ASSIGN_EXPRESSION,
     ADD_EXPRESSION,
     SUB_EXPRESSION,
@@ -141,15 +130,20 @@ typedef enum {
     LOGICAL_AND_EXPRESSION,
     LOGICAL_OR_EXPRESSION,
     MINUS_EXPRESSION,
+    LOGICAL_NOT_EXPRESSION,
     FUNCTION_CALL_EXPRESSION,
-    METHOD_CALL_EXPRESSION,
+    MEMBER_EXPRESSION,
     NULL_EXPRESSION,
     ARRAY_EXPRESSION,
     INDEX_EXPRESSION,
     INCREMENT_EXPRESSION,
     DECREMENT_EXPRESSION,
+    CLOSURE_EXPRESSION,
     EXPRESSION_TYPE_COUNT_PLUS_1
 } ExpressionType;
+
+#define crb_is_numeric_type(type)\
+  ((type) == CRB_INT_VALUE || (type) == CRB_DOUBLE_VALUE)
 
 #define dkc_is_math_operator(operator) \
   ((operator) == ADD_EXPRESSION || (operator) == SUB_EXPRESSION\
@@ -170,6 +164,22 @@ typedef struct ArgumentList_tag {
 } ArgumentList;
 
 typedef struct {
+    Expression  *left;
+    Expression  *right;
+} CommaExpression;
+
+typedef enum {
+    NORMAL_ASSIGN = 1,
+    ADD_ASSIGN,
+    SUB_ASSIGN,
+    MUL_ASSIGN,
+    DIV_ASSIGN,
+    MOD_ASSIGN
+} AssignmentOperator;
+
+typedef struct {
+    CRB_Boolean is_final;
+    AssignmentOperator  operator;
     Expression  *left;
     Expression  *operand;
 } AssignExpression;
@@ -196,13 +206,22 @@ typedef struct {
 
 typedef struct {
     Expression          *expression;
-    char                *identifier;
-    ArgumentList        *argument;
-} MethodCallExpression;
+    char                *member_name;
+} MemberExpression;
 
 typedef struct {
     Expression  *operand;
 } IncrementOrDecrement;
+
+typedef struct {
+    CRB_FunctionDefinition *function_definition;
+} ClosureExpression;
+
+struct CRB_Regexp_tag {
+    CRB_Boolean is_literal;
+    regex_t     *regexp;
+    struct CRB_Regexp_tag *next;
+};
 
 struct Expression_tag {
     ExpressionType type;
@@ -212,15 +231,19 @@ struct Expression_tag {
         int                     int_value;
         double                  double_value;
         CRB_Char                *string_value;
+        CRB_Regexp              *regexp_value;
         char                    *identifier;
+        CommaExpression         comma;
         AssignExpression        assign_expression;
         BinaryExpression        binary_expression;
         Expression              *minus_expression;
+        Expression              *logical_not;
         FunctionCallExpression  function_call_expression;
-        MethodCallExpression    method_call_expression;
+        MemberExpression        member_expression;
         ExpressionList          *array_literal;
         IndexExpression         index_expression;
         IncrementOrDecrement    inc_dec;
+        ClosureExpression       closure;
     } u;
 };
 
