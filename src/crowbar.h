@@ -1,7 +1,9 @@
 #ifndef PRIVATE_CROWBAR_H_INCLUDED
 #define PRIVATE_CROWBAR_H_INCLUDED
 #include <stdio.h>
+#include <setjmp.h>
 #include <wchar.h>
+#include <oniguruma.h>
 #include "MEM.h"
 #include "CRB.h"
 #include "CRB_dev.h"
@@ -9,13 +11,28 @@
 #define smaller(a, b) ((a) < (b) ? (a) : (b))
 #define larger(a, b) ((a) > (b) ? (a) : (b))
 
-#define IDENTIFIER_TABLE_ALLOC_SIZE     (256)
-#define STRING_LITERAL_TABLE_ALLOC_SIZE (256)
 #define MESSAGE_ARGUMENT_MAX    (256)
 #define LINE_BUF_SIZE           (1024)
 #define STACK_ALLOC_SIZE        (256)
 #define ARRAY_ALLOC_SIZE        (256)
 #define HEAP_THRESHOLD_SIZE     (1024 * 256)
+#define LONGJMP_ARG             (1)
+#define REGEXP_GROUP_INDEX_MAX_COLUMN  (3)
+
+#define EXCEPTION_MEMBER_MESSAGE        ("message")
+#define EXCEPTION_MEMBER_STACK_TRACE    ("stack_trace")
+#define EXCEPTION_MEMBER_LINE_NUMBER    ("line_number")
+#define EXCEPTION_MEMBER_FUNCTION_NAME  ("function_name")
+#define EXCEPTION_MEMBER_PRINT_STACK_TRACE      ("print_stack_trace")
+#define EXCEPTION_CREATE_METHOD_NAME    ("create")
+
+#define ARRAY_ITERATOR_METHOD_NAME ("__create_array_iterator")
+#define ITERATOR_METHOD_NAME    ("iterator")
+#define IS_DONE_METHOD_NAME     ("is_done")
+#define NEXT_METHOD_NAME        ("next")
+#define CURRENT_ITEM_METHOD_NAME        ("current_item")
+
+#define ARRAY_SIZE(array)  (sizeof(array) / sizeof((array)[0]))
 
 typedef enum {
     PARSE_ERR = 1,
