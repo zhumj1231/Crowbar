@@ -1208,37 +1208,86 @@ call_fake_method(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
 }
 
 static void
+do_function_call(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                 CRB_LocalEnvironment *caller_env, Expression *expr,
+                 CRB_Value *func)
+{
+    if (func->type == CRB_FAKE_METHOD_VALUE) {
+        call_fake_method(inter, env, caller_env, expr, &func->u.fake_method);
+        return;
+    }
+
+    DBG_assert(func->type == CRB_CLOSURE_VALUE,
+               ("func->type..%d\n", func->type));
+    switch (func->u.closure.function->type) {
+    case CRB_CROWBAR_FUNCTION_DEFINITION:
+        call_crowbar_function(inter, env, caller_env, expr, func);
+        break;
+    case CRB_NATIVE_FUNCTION_DEFINITION:
+        call_native_function(inter, env, caller_env, expr,
+                             func->u.closure.function->u.native_f.proc);
+        break;
+    case CRB_FUNCTION_DEFINITION_TYPE_COUNT_PLUS_1:
+    default:
+        DBG_assert(0, ("bad case..%d\n", func->u.closure.function->type));
+    }
+
+}
+
+static void
 eval_function_call_expression(CRB_Interpreter *inter,
                               CRB_LocalEnvironment *env,
                               Expression *expr)
 {
-    FunctionDefinition  *func;
-    CRB_LocalEnvironment    *local_env;
+    CRB_Value   *func;
+    CRB_LocalEnvironment        *local_env;
+    CRB_Object                  *closure_env;
+    char                        *func_name;
+    RecoveryEnvironment env_backup;
+    CRB_Value   return_value;
+    int stack_pointer_backup;
 
-    char *identifier = expr->u.function_call_expression.identifier;
-
-    func = crb_search_function(identifier);
-    if (func == NULL) {
-        crb_runtime_error(expr->line_number, FUNCTION_NOT_FOUND_ERR,
-                          STRING_MESSAGE_ARGUMENT, "name", identifier,
-                          MESSAGE_ARGUMENT_END);
+    eval_expression(inter, env,
+                    expr->u.function_call_expression.function);
+    func = peek_stack(inter, 0);
+    if (func->type == CRB_CLOSURE_VALUE) {
+        func_name = func->u.closure.function->name;
+        closure_env = func->u.closure.environment;
+    } else if (func->type == CRB_FAKE_METHOD_VALUE) {
+        func_name = func->u.fake_method.method_name;
+        closure_env = NULL;
+    } else {
+        crb_runtime_error(inter, env, expr->line_number,
+                          NOT_FUNCTION_ERR,
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+    
+    local_env = alloc_local_environment(inter, func_name, expr->line_number,
+                                        closure_env);
+    if (func->type == CRB_CLOSURE_VALUE
+        && func->u.closure.function->is_closure
+        && func->u.closure.function->name) {
+        CRB_add_assoc_member(inter,
+                             local_env->variable->u.scope_chain.frame,
+                             func->u.closure.function->name,
+                             func, CRB_TRUE);
     }
 
-    local_env = alloc_local_environment(inter);
-
-    switch (func->type) {
-    case CROWBAR_FUNCTION_DEFINITION:
-        call_crowbar_function(inter, local_env, env, expr, func);
-        break;
-    case NATIVE_FUNCTION_DEFINITION:
-        call_native_function(inter, local_env, env, expr,
-                             func->u.native_f.proc);
-        break;
-    case FUNCTION_DEFINITION_TYPE_COUNT_PLUS_1:
-    default:
-        DBG_panic(("bad case..%d\n", func->type));
+    stack_pointer_backup = crb_get_stack_pointer(inter);
+    env_backup = inter->current_recovery_environment;
+    if (setjmp(inter->current_recovery_environment.environment) == 0) {
+        do_function_call(inter, local_env, env, expr, func);
+    } else {
+        dispose_local_environment(inter);
+        crb_set_stack_pointer(inter, stack_pointer_backup);
+        longjmp(env_backup.environment, LONGJMP_ARG);
     }
+    inter->current_recovery_environment = env_backup;
     dispose_local_environment(inter);
+
+    return_value = pop_value(inter);
+    pop_value(inter); /* func */
+    push_value(inter, &return_value);
 }
 
 static void
