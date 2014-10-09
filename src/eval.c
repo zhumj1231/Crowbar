@@ -877,17 +877,23 @@ eval_logical_not_expression(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
 }
 
 static CRB_LocalEnvironment *
-alloc_local_environment(CRB_Interpreter *inter)
+alloc_local_environment(CRB_Interpreter *inter, char *func_name,
+                        int caller_line_number, CRB_Object *closure_env)
 {
     CRB_LocalEnvironment *ret;
 
     ret = MEM_malloc(sizeof(CRB_LocalEnvironment));
-    ret->variable = NULL;
-    ret->global_variable = NULL;
-    ret->ref_in_native_method = NULL;
-
     ret->next = inter->top_environment;
     inter->top_environment = ret;
+
+    ret->current_function_name = func_name;
+    ret->caller_line_number = caller_line_number;
+    ret->ref_in_native_method = NULL; /* to stop marking by GC */
+    ret->variable = NULL; /* to stop marking by GC */
+    ret->variable = crb_create_scope_chain(inter);
+    ret->variable->u.scope_chain.frame = crb_create_assoc_i(inter);
+    ret->variable->u.scope_chain.next = closure_env;
+    ret->global_variable = NULL;
 
     return ret;
 }
@@ -907,24 +913,66 @@ dispose_ref_in_native_method(CRB_LocalEnvironment *env)
 static void
 dispose_local_environment(CRB_Interpreter *inter)
 {
-    CRB_LocalEnvironment *env = inter->top_environment;
+    GlobalVariableRef *ref;
 
-    while (env->variable) {
-        Variable        *temp;
-        temp = env->variable;
-        env->variable = temp->next;
-        MEM_free(temp);
-    }
-    while (env->global_variable) {
-        GlobalVariableRef *ref;
-        ref = env->global_variable;
-        env->global_variable = ref->next;
+    CRB_LocalEnvironment *temp = inter->top_environment;
+    inter->top_environment = inter->top_environment->next;
+
+    while (temp->global_variable) {
+        ref = temp->global_variable;
+        temp->global_variable = ref->next;
         MEM_free(ref);
     }
-    dispose_ref_in_native_method(env);
+    dispose_ref_in_native_method(temp);
 
-    inter->top_environment = env->next;
-    MEM_free(env);
+    MEM_free(temp);
+}
+
+static void
+call_crowbar_function(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                      CRB_LocalEnvironment *caller_env,
+                      Expression *expr, CRB_Value *func)
+{
+    CRB_Value   value;
+    StatementResult     result;
+    ArgumentList        *arg_p;
+    CRB_ParameterList   *param_p;
+
+    for (arg_p = expr->u.function_call_expression.argument,
+             param_p = func->u.closure.function->u.crowbar_f.parameter;
+         arg_p;
+
+         arg_p = arg_p->next, param_p = param_p->next) {
+        CRB_Value *arg_val;
+
+        if (param_p == NULL) {
+            crb_runtime_error(inter, caller_env, expr->line_number,
+                              ARGUMENT_TOO_MANY_ERR,
+                              CRB_MESSAGE_ARGUMENT_END);
+        }
+        eval_expression(inter, caller_env, arg_p->expression);
+        arg_val = peek_stack(inter, 0);
+        CRB_add_local_variable(inter, env, param_p->name, arg_val,
+                               CRB_FALSE);
+        pop_value(inter);
+    }
+    if (param_p) {
+        crb_runtime_error(inter, caller_env, expr->line_number,
+                          ARGUMENT_TOO_FEW_ERR,
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+
+    result = crb_execute_statement_list(inter, env,
+                                        func->u.closure.function
+                                        ->u.crowbar_f.block->statement_list);
+
+    if (result.type == RETURN_STATEMENT_RESULT) {
+        value = result.u.return_value;
+    } else {
+        value.type = CRB_NULL_VALUE;
+    }
+    
+    push_value(inter, &value);
 }
 
 static void
@@ -935,7 +983,7 @@ call_native_function(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     CRB_Value   value;
     int         arg_count;
     ArgumentList        *arg_p;
-    CRB_Value   *args;
+    CRB_Value   *args = NULL;
 
     for (arg_count = 0, arg_p = expr->u.function_call_expression.argument;
          arg_p; arg_p = arg_p->next) {
@@ -950,46 +998,118 @@ call_native_function(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
 }
 
 static void
-call_crowbar_function(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
-                      CRB_LocalEnvironment *caller_env,
-                      Expression *expr, FunctionDefinition *func)
+check_method_argument_count(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                            int line_number,
+                            int arg_count, int param_count)
 {
-    CRB_Value   value;
-    StatementResult     result;
-    ArgumentList        *arg_p;
-    ParameterList       *param_p;
-
-
-    for (arg_p = expr->u.function_call_expression.argument,
-             param_p = func->u.crowbar_f.parameter;
-         arg_p;
-         arg_p = arg_p->next, param_p = param_p->next) {
-        Variable *new_var;
-        CRB_Value arg_val;
-
-         if (param_p == NULL) {
-             crb_runtime_error(expr->line_number, ARGUMENT_TOO_MANY_ERR,
-                               MESSAGE_ARGUMENT_END);
-         }
-         eval_expression(inter, caller_env, arg_p->expression);
-         arg_val = pop_value(inter);
-         new_var = crb_add_local_variable(env, param_p->name);
-         new_var->value = arg_val;
+    if (arg_count < param_count) {
+        crb_runtime_error(inter, env, line_number, ARGUMENT_TOO_FEW_ERR,
+                          CRB_MESSAGE_ARGUMENT_END);
+    } else if (arg_count > param_count) {
+        crb_runtime_error(inter, env, line_number, ARGUMENT_TOO_MANY_ERR,
+                          CRB_MESSAGE_ARGUMENT_END);
     }
-     if (param_p) {
-         crb_runtime_error(expr->line_number, ARGUMENT_TOO_FEW_ERR,
-                           MESSAGE_ARGUMENT_END);
-     }
-     result = crb_execute_statement_list(inter, env,
-                                         func->u.crowbar_f.block
-                                         ->statement_list);
-     if (result.type == RETURN_STATEMENT_RESULT) {
-         value = result.u.return_value;
-     } else {
-         value.type = CRB_NULL_VALUE;
-     }
+}
 
-     push_value(inter, &value);
+typedef struct {
+    ObjectType  type;
+    char        *name;
+    int         argument_count;
+    void        (*func)(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                        CRB_Object *obj, CRB_Value *result);
+} FakeMethodTable;
+
+static void
+array_add_method(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                 CRB_Object *obj, CRB_Value *result)
+{
+    CRB_Value *add;
+
+    add = peek_stack(inter, 0);
+    CRB_array_add(inter, obj, add);
+    result->type = CRB_NULL_VALUE;
+}
+
+static void
+array_size_method(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                  CRB_Object *obj, CRB_Value *result)
+{
+    result->type = CRB_INT_VALUE;
+    result->u.int_value = obj->u.array.size;
+}
+
+static void
+array_resize_method(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                    CRB_Object *obj, CRB_Value *result)
+{
+    CRB_Value *new_size;
+
+    new_size = peek_stack(inter, 0);
+    if (new_size->type != CRB_INT_VALUE) {
+        crb_runtime_error(inter, env, __LINE__,
+                          ARRAY_RESIZE_ARGUMENT_ERR,
+                          CRB_STRING_MESSAGE_ARGUMENT,
+                          "type", CRB_get_type_name(new_size->type),
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+    CRB_array_resize(inter, obj, new_size->u.int_value);
+    result->type = CRB_NULL_VALUE;
+}
+
+static void
+array_insert_method(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                    CRB_Object *obj, CRB_Value *result)
+{
+    CRB_Value *new_value;
+    CRB_Value *pos;
+
+    new_value = peek_stack(inter, 0);
+    pos = peek_stack(inter, 1);
+    if (pos->type != CRB_INT_VALUE) {
+        crb_runtime_error(inter, env, __LINE__,
+                          ARRAY_INSERT_ARGUMENT_ERR,
+                          CRB_STRING_MESSAGE_ARGUMENT,
+                          "type", CRB_get_type_name(pos->type),
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+    CRB_array_insert(inter, env, obj, pos->u.int_value,
+                     new_value, __LINE__);
+    result->type = CRB_NULL_VALUE;
+}
+
+static void
+array_remove_method(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                    CRB_Object *obj, CRB_Value *result)
+{
+    CRB_Value *pos;
+
+    pos = peek_stack(inter, 0);
+    if (pos->type != CRB_INT_VALUE) {
+        crb_runtime_error(inter, env, __LINE__,
+                          ARRAY_REMOVE_ARGUMENT_ERR,
+                          CRB_STRING_MESSAGE_ARGUMENT,
+                          "type", CRB_get_type_name(pos->type),
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+    CRB_array_remove(inter, env, obj, pos->u.int_value,
+                     __LINE__);
+    result->type = CRB_NULL_VALUE;
+}
+
+static void
+array_iterator_method(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                    CRB_Object *obj, CRB_Value *result)
+{
+    CRB_Value ret;
+    CRB_Value array;
+
+    array.type = CRB_ARRAY_VALUE;
+    array.u.object = obj;
+
+    ret = CRB_call_function_by_name(inter, env, __LINE__,
+                                    ARRAY_ITERATOR_METHOD_NAME,
+                                    1, &array);
+    *result = ret;
 }
 
 static void
