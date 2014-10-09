@@ -634,9 +634,14 @@ CRB_create_exception(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     return ret;
 }
 
+static void gc_mark_value(CRB_Value *v);
+
 static void
 gc_mark(CRB_Object *obj)
 {
+    if (obj == NULL)
+        return;
+
     if (obj->marked)
         return;
 
@@ -645,10 +650,16 @@ gc_mark(CRB_Object *obj)
     if (obj->type == ARRAY_OBJECT) {
         int i;
         for (i = 0; i < obj->u.array.size; i++) {
-            if (dkc_is_object_value(obj->u.array.array[i].type)) {
-                gc_mark(obj->u.array.array[i].u.object);
-            }
+            gc_mark_value(&obj->u.array.array[i]);
         }
+    } else if (obj->type == ASSOC_OBJECT) {
+        int i;
+        for (i = 0; i < obj->u.assoc.member_count; i++) {
+            gc_mark_value(&obj->u.assoc.member[i].value);
+        }
+    } else if (obj->type == SCOPE_CHAIN_OBJECT) {
+        gc_mark(obj->u.scope_chain.frame);
+        gc_mark(obj->u.scope_chain.next);
     }
 }
 
@@ -656,6 +667,20 @@ static void
 gc_reset_mark(CRB_Object *obj)
 {
     obj->marked = CRB_FALSE;
+}
+
+static void
+gc_mark_value(CRB_Value *v)
+{
+    if (crb_is_object_value(v->type)) {
+        gc_mark(v->u.object);
+    } else if (v->type == CRB_CLOSURE_VALUE) {
+        if (v->u.closure.environment) {
+            gc_mark(v->u.closure.environment);
+        }
+    } else if (v->type == CRB_FAKE_METHOD_VALUE) {
+        gc_mark(v->u.fake_method.object);
+    }
 }
 
 static void
@@ -681,25 +706,19 @@ gc_mark_objects(CRB_Interpreter *inter)
     }
     
     for (v = inter->variable; v; v = v->next) {
-        if (dkc_is_object_value(v->value.type)) {
-            gc_mark(v->value.u.object);
-        }
+        gc_mark_value(&v->value);
     }
     
     for (lv = inter->top_environment; lv; lv = lv->next) {
-        for (v = lv->variable; v; v = v->next) {
-            if (dkc_is_object_value(v->value.type)) {
-                gc_mark(v->value.u.object);
-            }
-        }
+        gc_mark(lv->variable);
         gc_mark_ref_in_native_method(lv);
     }
 
     for (i = 0; i < inter->stack.stack_pointer; i++) {
-        if (dkc_is_object_value(inter->stack.stack[i].type)) {
-            gc_mark(inter->stack.stack[i].u.object);
-        }
+        gc_mark_value(&inter->stack.stack[i]);
     }
+
+    gc_mark_value(&inter->current_exception);
 }
 
 static void
@@ -716,6 +735,18 @@ gc_dispose_object(CRB_Interpreter *inter, CRB_Object *obj)
             inter->heap.current_heap_size
                 -= sizeof(CRB_Char) * (CRB_wcslen(obj->u.string.string) + 1);
             MEM_free(obj->u.string.string);
+        }
+        break;
+    case ASSOC_OBJECT:
+        inter->heap.current_heap_size
+            -= sizeof(AssocMember) * obj->u.assoc.member_count;
+        MEM_free(obj->u.assoc.member);
+        break;
+    case SCOPE_CHAIN_OBJECT:
+        break;
+    case NATIVE_POINTER_OBJECT:
+        if (obj->u.native_pointer.info->finalizer) {
+            obj->u.native_pointer.info->finalizer(inter, obj);
         }
         break;
     case OBJECT_TYPE_COUNT_PLUS_1:
