@@ -254,6 +254,109 @@ CRB_array_remove(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     CRB_array_resize(inter, obj, obj->u.array.size - 1);
 }
 
+CRB_Object *
+crb_create_assoc_i(CRB_Interpreter *inter)
+{
+    CRB_Object *ret;
+
+    ret = alloc_object(inter, ASSOC_OBJECT);
+    ret->u.assoc.member_count = 0;
+    ret->u.assoc.member = NULL;
+
+    return ret;
+}
+
+CRB_Object *
+CRB_create_assoc(CRB_Interpreter *inter, CRB_LocalEnvironment *env)
+{
+    CRB_Object *ret;
+
+    ret = crb_create_assoc_i(inter);
+    add_ref_in_native_method(env, ret);
+
+    return ret;
+}
+
+CRB_Value *
+CRB_add_assoc_member(CRB_Interpreter *inter, CRB_Object *assoc,
+                     char *name, CRB_Value *value, CRB_Boolean is_final)
+{
+    AssocMember *member_p;
+
+    check_gc(inter);
+    member_p = MEM_realloc(assoc->u.assoc.member,
+                           sizeof(AssocMember)
+                           * (assoc->u.assoc.member_count+1));
+    member_p[assoc->u.assoc.member_count].name = name;
+    member_p[assoc->u.assoc.member_count].value = *value;
+    member_p[assoc->u.assoc.member_count].is_final = is_final;
+    assoc->u.assoc.member = member_p;
+    assoc->u.assoc.member_count++;
+    inter->heap.current_heap_size += sizeof(AssocMember);
+
+    return &member_p[assoc->u.assoc.member_count-1].value;
+}
+
+void
+CRB_add_assoc_member2(CRB_Interpreter *inter, CRB_Object *assoc,
+                      char *name, CRB_Value *value)
+{
+    int i;
+
+    if (assoc->u.assoc.member_count > 0) {
+        for (i = 0; i < assoc->u.assoc.member_count; i++) {
+            if (!strcmp(assoc->u.assoc.member[i].name, name)) {
+                break;
+            }
+        }
+        if (i < assoc->u.assoc.member_count) {
+            /* BUGBUG */
+            assoc->u.assoc.member[i].value = *value;
+            return;
+        }
+    }
+    CRB_add_assoc_member(inter, assoc, name, value, CRB_FALSE);
+}
+
+CRB_Value *
+CRB_search_assoc_member(CRB_Object *assoc, char *member_name)
+{
+    CRB_Value *ret = NULL;
+    int i;
+
+    if (assoc->u.assoc.member_count == 0)
+        return NULL;
+
+    for (i = 0; i < assoc->u.assoc.member_count; i++) {
+        if (!strcmp(assoc->u.assoc.member[i].name, member_name)) {
+            ret = &assoc->u.assoc.member[i].value;
+            break;
+        }
+    }
+
+    return ret;
+}
+
+CRB_Value *
+CRB_search_assoc_member_w(CRB_Object *assoc, char *member_name,
+                          CRB_Boolean *is_final)
+{
+    CRB_Value *ret = NULL;
+    int i;
+
+    if (assoc->u.assoc.member_count == 0)
+        return NULL;
+
+    for (i = 0; i < assoc->u.assoc.member_count; i++) {
+        if (!strcmp(assoc->u.assoc.member[i].name, member_name)) {
+            ret = &assoc->u.assoc.member[i].value;
+            *is_final = assoc->u.assoc.member[i].is_final;
+            break;
+        }
+    }
+    return ret;
+}
+
 static void
 gc_mark(CRB_Object *obj)
 {
