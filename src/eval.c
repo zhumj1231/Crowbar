@@ -463,6 +463,37 @@ eval_binary_double(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     }
 }
 
+void
+eval_binary_numeric(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                    ExpressionType operator,
+                    CRB_Value *left_val, CRB_Value *right_val,
+                    CRB_Value *result, int line_number)
+{
+    if (left_val->type == CRB_INT_VALUE
+        && right_val->type == CRB_INT_VALUE) {
+        eval_binary_int(inter, env, operator,
+                        left_val->u.int_value, right_val->u.int_value,
+                        result, line_number);
+    } else if (left_val->type == CRB_DOUBLE_VALUE
+               && right_val->type == CRB_DOUBLE_VALUE) {
+        eval_binary_double(inter, env, operator,
+                           left_val->u.double_value, right_val->u.double_value,
+                           result, line_number);
+    } else if (left_val->type == CRB_INT_VALUE
+               && right_val->type == CRB_DOUBLE_VALUE) {
+        eval_binary_double(inter, env, operator,
+                           (double)left_val->u.int_value,
+                           right_val->u.double_value,
+                           result, line_number);
+    } else if (left_val->type == CRB_DOUBLE_VALUE
+               && right_val->type == CRB_INT_VALUE) {
+        eval_binary_double(inter, env, operator,
+                           left_val->u.double_value,
+                           (double)right_val->u.int_value,
+                           result, line_number);
+    }
+}
+
 static CRB_Boolean
 eval_compare_string(ExpressionType operator,
                     CRB_Value *left, CRB_Value *right, int line_number)
