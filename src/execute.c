@@ -359,6 +359,7 @@ execute_break_statement(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     StatementResult result;
 
     result.type = BREAK_STATEMENT_RESULT;
+    result.u.label = statement->u.break_s.label;
 
     return result;
 }
@@ -370,8 +371,72 @@ execute_continue_statement(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     StatementResult result;
 
     result.type = CONTINUE_STATEMENT_RESULT;
+    result.u.label = statement->u.continue_s.label;
 
     return result;
+}
+
+static StatementResult
+execute_try_statement(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                      Statement *statement)
+{
+    StatementResult result;
+    int stack_pointer_backup;
+    RecoveryEnvironment env_backup;
+
+    stack_pointer_backup = crb_get_stack_pointer(inter);
+    env_backup = inter->current_recovery_environment;
+    if (setjmp(inter->current_recovery_environment.environment) == 0) {
+        result = crb_execute_statement_list(inter, env,
+                                            statement->u.try_s.try_block
+                                            ->statement_list);
+    } else {
+        crb_set_stack_pointer(inter, stack_pointer_backup);
+        inter->current_recovery_environment = env_backup;
+
+        if (statement->u.try_s.catch_block) {
+            CRB_Value ex_value;
+
+            ex_value = inter->current_exception;
+            CRB_push_value(inter, &ex_value);
+            inter->current_exception.type = CRB_NULL_VALUE;
+
+            assign_to_variable(inter, env, statement->line_number,
+                               statement->u.try_s.exception, &ex_value);
+
+            result = crb_execute_statement_list(inter, env,
+                                                statement->u.try_s.catch_block
+                                                ->statement_list);
+            CRB_shrink_stack(inter, 1);
+        }
+    }
+    inter->current_recovery_environment = env_backup;
+    if (statement->u.try_s.finally_block) {
+        crb_execute_statement_list(inter, env,
+                                   statement->u.try_s.finally_block
+                                   ->statement_list);
+    }
+    if (!statement->u.try_s.catch_block
+        && inter->current_exception.type != CRB_NULL_VALUE) {
+        longjmp(env_backup.environment, LONGJMP_ARG);
+    }
+
+    return result;
+}
+
+static StatementResult
+execute_throw_statement(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                        Statement *statement)
+{
+    CRB_Value *ex_val;
+
+    ex_val = crb_eval_and_peek_expression(inter, env,
+                                          statement->u.throw_s.exception);
+    inter->current_exception = *ex_val;
+
+    CRB_shrink_stack(inter, 1);
+
+    longjmp(inter->current_recovery_environment.environment, LONGJMP_ARG);
 }
 
 static StatementResult
@@ -398,6 +463,9 @@ execute_statement(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     case FOR_STATEMENT:
         result = execute_for_statement(inter, env, statement);
         break;
+    case FOREACH_STATEMENT:
+        result = execute_foreach_statement(inter, env, statement);
+        break;
     case RETURN_STATEMENT:
         result = execute_return_statement(inter, env, statement);
         break;
@@ -407,9 +475,15 @@ execute_statement(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     case CONTINUE_STATEMENT:
         result = execute_continue_statement(inter, env, statement);
         break;
+    case TRY_STATEMENT:
+        result = execute_try_statement(inter, env, statement);
+        break;
+    case THROW_STATEMENT:
+        result = execute_throw_statement(inter, env, statement);
+        break;
     case STATEMENT_TYPE_COUNT_PLUS_1:   /* FALLTHRU */
     default:
-        DBG_panic(("bad case...%d", statement->type));
+        DBG_assert(0, ("bad case...%d", statement->type));
     }
 
     return result;
