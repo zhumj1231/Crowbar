@@ -1113,6 +1113,72 @@ array_iterator_method(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
 }
 
 static void
+string_length_method(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                     CRB_Object *obj, CRB_Value *result)
+{
+    result->type = CRB_INT_VALUE;
+    result->u.int_value = CRB_wcslen(obj->u.string.string);
+}
+
+static void
+string_substr_method(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                     CRB_Object *obj, CRB_Value *result)
+{
+    CRB_Value *arg1;
+    CRB_Value *arg2;
+
+    arg1 = peek_stack(inter, 1);
+    arg2 = peek_stack(inter, 0);
+
+    if (arg1->type != CRB_INT_VALUE || arg2->type != CRB_INT_VALUE) {
+        crb_runtime_error(inter, env, __LINE__,
+                          STRING_SUBSTR_ARGUMENT_ERR,
+                          CRB_STRING_MESSAGE_ARGUMENT,
+                          "type1", CRB_get_type_name(arg1->type),
+                          CRB_STRING_MESSAGE_ARGUMENT,
+                          "type2", CRB_get_type_name(arg2->type),
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+    result->type = CRB_STRING_VALUE;
+    result->u.object
+        = crb_string_substr_i(inter, env, obj,
+                              arg1->u.int_value, arg2->u.int_value,
+                              __LINE__);
+}
+
+static FakeMethodTable st_fake_method_table[] = {
+    {ARRAY_OBJECT, "add", 1, array_add_method},
+    {ARRAY_OBJECT, "size", 0, array_size_method},
+    {ARRAY_OBJECT, "resize", 1, array_resize_method},
+    {ARRAY_OBJECT, "insert", 2, array_insert_method},
+    {ARRAY_OBJECT, "remove", 1, array_remove_method},
+    {ARRAY_OBJECT, "iterator", 0, array_iterator_method},
+    {STRING_OBJECT, "length", 0, string_length_method},
+    {STRING_OBJECT, "substr", 2, string_substr_method},
+};B_get_type_name(arg1->type),
+                          CRB_STRING_MESSAGE_ARGUMENT,
+                          "type2", CRB_get_type_name(arg2->type),
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+    result->type = CRB_STRING_VALUE;
+    result->u.object
+        = crb_string_substr_i(inter, env, obj,
+                              arg1->u.int_value, arg2->u.int_value,
+                              __LINE__);
+}
+
+static FakeMethodTable st_fake_method_table[] = {
+    {ARRAY_OBJECT, "add", 1, array_add_method},
+    {ARRAY_OBJECT, "size", 0, array_size_method},
+    {ARRAY_OBJECT, "resize", 1, array_resize_method},
+    {ARRAY_OBJECT, "insert", 2, array_insert_method},
+    {ARRAY_OBJECT, "remove", 1, array_remove_method},
+    {ARRAY_OBJECT, "iterator", 0, array_iterator_method},
+    {STRING_OBJECT, "length", 0, string_length_method},
+    {STRING_OBJECT, "substr", 2, string_substr_method},
+};
+
+static void
 eval_function_call_expression(CRB_Interpreter *inter,
                               CRB_LocalEnvironment *env,
                               Expression *expr)
