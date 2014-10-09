@@ -412,8 +412,8 @@ crb_chain_identifier(IdentifierList *list, char *identifier)
 
 Statement *
 crb_create_if_statement(Expression *condition,
-                        Block *then_block, Elsif *elsif_list,
-                        Block *else_block)
+                        CRB_Block *then_block, Elsif *elsif_list,
+                        CRB_Block *else_block)
 {
     Statement *st;
 
@@ -439,7 +439,7 @@ crb_chain_elsif_list(Elsif *list, Elsif *add)
 }
 
 Elsif *
-crb_create_elsif(Expression *expr, Block *block)
+crb_create_elsif(Expression *expr, CRB_Block *block)
 {
     Elsif *ei;
 
@@ -452,11 +452,13 @@ crb_create_elsif(Expression *expr, Block *block)
 }
 
 Statement *
-crb_create_while_statement(Expression *condition, Block *block)
+crb_create_while_statement(char *label,
+                           Expression *condition, CRB_Block *block)
 {
     Statement *st;
 
     st = alloc_statement(WHILE_STATEMENT);
+    st->u.while_s.label = label;
     st->u.while_s.condition = condition;
     st->u.while_s.block = block;
 
@@ -464,12 +466,13 @@ crb_create_while_statement(Expression *condition, Block *block)
 }
 
 Statement *
-crb_create_for_statement(Expression *init, Expression *cond,
-                         Expression *post, Block *block)
+crb_create_for_statement(char *label, Expression *init, Expression *cond,
+                         Expression *post, CRB_Block *block)
 {
     Statement *st;
 
     st = alloc_statement(FOR_STATEMENT);
+    st->u.for_s.label = label;
     st->u.for_s.init = init;
     st->u.for_s.condition = cond;
     st->u.for_s.post = post;
@@ -478,12 +481,27 @@ crb_create_for_statement(Expression *init, Expression *cond,
     return st;
 }
 
-Block *
+Statement *
+crb_create_foreach_statement(char *label, char *variable,
+                             Expression *collection, CRB_Block *block)
+{
+    Statement *st;
+
+    st = alloc_statement(FOREACH_STATEMENT);
+    st->u.foreach_s.label = label;
+    st->u.foreach_s.variable = variable;
+    st->u.foreach_s.collection = collection;
+    st->u.for_s.block = block;
+
+    return st;
+}
+
+CRB_Block *
 crb_create_block(StatementList *statement_list)
 {
-    Block *block;
+    CRB_Block *block;
 
-    block = crb_malloc(sizeof(Block));
+    block = crb_malloc(sizeof(CRB_Block));
     block->statement_list = statement_list;
 
     return block;
@@ -511,12 +529,24 @@ crb_create_return_statement(Expression *expression)
     return st;
 }
 
-Statement *crb_create_break_statement(void)
+Statement *
+crb_create_break_statement(char *label)
 {
-    return alloc_statement(BREAK_STATEMENT);
+    Statement *st;
+
+    st = alloc_statement(BREAK_STATEMENT);
+    st->u.break_s.label = label;
+
+    return st;
 }
 
-Statement *crb_create_continue_statement(void)
+Statement *
+crb_create_continue_statement(char *label)
 {
-    return alloc_statement(CONTINUE_STATEMENT);
+    Statement *st;
+
+    st = alloc_statement(CONTINUE_STATEMENT);
+    st->u.continue_s.label = label;
+
+    return st;
 }
