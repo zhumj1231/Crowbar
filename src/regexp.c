@@ -444,3 +444,29 @@ nv_replace_proc(CRB_Interpreter *inter,
     return result;
 }
 
+static CRB_Value
+nv_replace_all_proc(CRB_Interpreter *inter,
+                    CRB_LocalEnvironment *env,
+                    int arg_count, CRB_Value *args)
+{
+    static CRB_ValueType arg_type[] = {
+        CRB_NATIVE_POINTER_VALUE,       /* pattern */
+        CRB_STRING_VALUE,               /* replacement */
+        CRB_STRING_VALUE,               /* subject */
+    };
+    char *FUNC_NAME = "reg_replace_all";
+    CRB_Regexp *crb_reg;
+    CRB_Value result;
+    
+    CRB_check_argument(inter, env, arg_count, ARRAY_SIZE(arg_type),
+                       args, arg_type, FUNC_NAME);
+
+    crb_reg = CRB_object_get_native_pointer(args[0].u.object);
+
+    result.type = CRB_STRING_VALUE;
+    result.u.object
+        = replace_crb_if(inter, env, crb_reg,
+                         args[1].u.object, args[2].u.object, INT_MAX);
+
+    return result;
+}
