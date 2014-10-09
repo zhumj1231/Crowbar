@@ -494,6 +494,162 @@ eval_binary_numeric(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     }
 }
 
+void
+chain_string(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+             int line_number, CRB_Value *left, CRB_Value *right,
+             CRB_Value *result)
+{
+    CRB_Char    *right_str;
+    CRB_Object *right_obj;
+    int         len;
+    CRB_Char    *str;
+
+    right_str = CRB_value_to_string(inter, env, line_number, right);
+    right_obj = crb_create_crowbar_string_i(inter, right_str);
+
+    result->type = CRB_STRING_VALUE;
+    len = CRB_wcslen(left->u.object->u.string.string)
+        + CRB_wcslen(right_obj->u.string.string);
+    str = MEM_malloc(sizeof(CRB_Char) * (len + 1));
+    CRB_wcscpy(str, left->u.object->u.string.string);
+    CRB_wcscat(str, right_obj->u.string.string);
+    result->u.object = crb_create_crowbar_string_i(inter, str);
+}
+
+static void
+do_assign(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+          CRB_Value *src, CRB_Value *dest,
+          AssignmentOperator operator, int line_number)
+{
+    ExpressionType expr_type;
+    CRB_Value result;
+
+    if (operator == NORMAL_ASSIGN) {
+        *dest = *src;
+    } else {
+        switch (operator) {
+        case NORMAL_ASSIGN:
+            DBG_panic(("NORMAL_ASSIGN.\n"));
+        case ADD_ASSIGN:
+            expr_type = ADD_EXPRESSION;
+            break;
+        case SUB_ASSIGN:
+            expr_type = SUB_EXPRESSION;
+            break;
+        case MUL_ASSIGN:
+            expr_type = MUL_EXPRESSION;
+            break;
+        case DIV_ASSIGN:
+            expr_type = DIV_EXPRESSION;
+            break;
+        case MOD_ASSIGN:
+            expr_type = MOD_EXPRESSION;
+            break;
+        default:
+            DBG_panic(("bad default.\n"));
+        }
+        if (dest->type == CRB_STRING_VALUE
+            && expr_type == ADD_EXPRESSION) {
+            chain_string(inter, env, line_number, dest, src, &result);
+        } else {
+            eval_binary_numeric(inter, env, expr_type,
+                                dest, src, &result, line_number);
+        }
+        *dest = result;
+    }
+}
+
+static void
+assign_to_member(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                 Expression *expr, CRB_Value *src)
+{
+    CRB_Value *assoc;
+    CRB_Value *dest;
+    Expression *left = expr->u.assign_expression.left;
+    CRB_Boolean is_final;
+
+    eval_expression(inter, env, left->u.member_expression.expression);
+    assoc = peek_stack(inter, 0);
+    if (assoc->type != CRB_ASSOC_VALUE) {
+        crb_runtime_error(inter, env, expr->line_number,
+                          NOT_OBJECT_MEMBER_ASSIGN_ERR,
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+
+    dest = CRB_search_assoc_member_w(assoc->u.object,
+                                     left->u.member_expression.member_name,
+                                     &is_final);
+    if (dest == NULL) {
+        if (expr->u.assign_expression.operator != NORMAL_ASSIGN) {
+            crb_runtime_error(inter, env, expr->line_number,
+                              NO_SUCH_MEMBER_ERR,
+                              CRB_STRING_MESSAGE_ARGUMENT, "member_name",
+                              left->u.member_expression.member_name,
+                              CRB_MESSAGE_ARGUMENT_END);
+        }
+        CRB_add_assoc_member(inter, assoc->u.object,
+                             left->u.member_expression.member_name,
+                             src, expr->u.assign_expression.is_final);
+    } else {
+        if (is_final) {
+            crb_runtime_error(inter, env, expr->line_number,
+                              ASSIGN_TO_FINAL_VARIABLE_ERR,
+                              CRB_STRING_MESSAGE_ARGUMENT, "name",
+                              left->u.member_expression.member_name,
+                              CRB_MESSAGE_ARGUMENT_END);
+        }
+        do_assign(inter, env, src, dest, expr->u.assign_expression.operator,
+                  expr->line_number);
+    }
+    pop_value(inter);
+}
+
+static void
+eval_assign_expression(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                       Expression *expr)
+{
+    CRB_Value   *src;
+    CRB_Value   *dest;
+    Expression  *left = expr->u.assign_expression.left;
+
+    eval_expression(inter, env, expr->u.assign_expression.operand);
+    src = peek_stack(inter, 0);
+
+    if (left->type == MEMBER_EXPRESSION) {
+        assign_to_member(inter, env, expr, src);
+        return;
+    }
+
+    dest = get_lvalue(inter, env, left);
+    if (left->type == IDENTIFIER_EXPRESSION && dest == NULL) {
+        if (expr->u.assign_expression.operator != NORMAL_ASSIGN) {
+            crb_runtime_error(inter, env, expr->line_number,
+                              VARIABLE_NOT_FOUND_ERR,
+                              CRB_STRING_MESSAGE_ARGUMENT, "name",
+                              left->u.identifier,
+                              CRB_MESSAGE_ARGUMENT_END);
+        }
+        if (env != NULL) {
+            CRB_add_local_variable(inter, env, left->u.identifier, src,
+                                   expr->u.assign_expression.is_final);
+        } else {
+            if (CRB_search_function(inter, left->u.identifier)) {
+                crb_runtime_error(inter, env, expr->line_number,
+                                  FUNCTION_EXISTS_ERR,
+                                  CRB_STRING_MESSAGE_ARGUMENT, "name",
+                                  left->u.identifier,
+                                  CRB_MESSAGE_ARGUMENT_END);
+            }
+            CRB_add_global_variable(inter, left->u.identifier, src,
+                                    expr->u.assign_expression.is_final);
+        }
+    } else {
+        DBG_assert(dest != NULL, ("dest == NULL.\n"));
+        do_assign(inter, env, src, dest, expr->u.assign_expression.operator,
+                  expr->line_number);
+    }
+}
+
 static CRB_Boolean
 eval_compare_string(ExpressionType operator,
                     CRB_Value *left, CRB_Value *right, int line_number)
