@@ -544,6 +544,96 @@ print_stack_trace(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     return ret;
 }
 
+CRB_Object *
+CRB_create_exception(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                     CRB_Object *message, int line_number)
+{
+    CRB_Object  *ret;
+    CRB_Value   value;
+    CRB_Object  *stack_trace; /* CRB_Array */
+    int         stack_count = 0;
+    int         stack_trace_depth;
+    CRB_LocalEnvironment *env_pos;
+    int         stack_trace_idx;
+    CRB_Object  *line; /* CRB_Assoc */
+    char        *func_name;
+    int         next_line_number;
+    static      CRB_FunctionDefinition print_stack_trace_fd;
+    CRB_Value   scope_chain;
+
+    ret = crb_create_assoc_i(inter);
+    value.type = CRB_ASSOC_VALUE;
+    value.u.object = ret;
+    CRB_push_value(inter, &value);
+    stack_count++;
+
+    value.type = CRB_STRING_VALUE;
+    value.u.object = message;
+    CRB_push_value(inter, &value);
+    stack_count++;
+    CRB_add_assoc_member(inter, ret, EXCEPTION_MEMBER_MESSAGE, &value,
+                         CRB_TRUE);
+
+    stack_trace_depth = count_stack_trace_depth(env);
+    stack_trace = crb_create_array_i(inter, stack_trace_depth);
+    value.type = CRB_ARRAY_VALUE;
+    value.u.object = stack_trace;
+    CRB_push_value(inter, &value);
+    stack_count++;
+
+    CRB_add_assoc_member(inter, ret, EXCEPTION_MEMBER_STACK_TRACE, &value,
+                         CRB_TRUE);
+
+    next_line_number = line_number;
+    for (env_pos = env, stack_trace_idx = 0; env_pos;
+         env_pos = env_pos->next, stack_trace_idx++) {
+        if (env_pos->current_function_name) {
+            func_name = env_pos->current_function_name;
+        } else {
+            func_name = "anonymous closure";
+        }
+        line = create_stack_trace_line(inter, env, func_name,
+                                       next_line_number);
+        value.type = CRB_ASSOC_VALUE;
+        value.u.object = line;
+        CRB_array_set(inter, env, stack_trace, stack_trace_idx,
+                      &value);
+        next_line_number = env_pos->caller_line_number;
+    }
+    
+    line = create_stack_trace_line(inter, env, "top_level",
+                                   next_line_number);
+    value.type = CRB_ASSOC_VALUE;
+    value.u.object = line;
+    CRB_array_set(inter, env, stack_trace, stack_trace_idx,
+                  &value);
+
+    CRB_set_function_definition(NULL, print_stack_trace,
+                                &print_stack_trace_fd);
+
+    CRB_push_value(inter, &value);
+    stack_count++;
+
+    value.type = CRB_CLOSURE_VALUE;
+    value.u.closure.function = &print_stack_trace_fd;
+    value.u.closure.environment = NULL; /* to stop marking by GC */
+
+    scope_chain.type = CRB_SCOPE_CHAIN_VALUE;
+    scope_chain.u.object = crb_create_scope_chain(inter);
+    scope_chain.u.object->u.scope_chain.frame = ret;
+    CRB_push_value(inter, &scope_chain);
+    stack_count++;
+
+    value.u.closure.environment = scope_chain.u.object;
+
+    CRB_add_assoc_member(inter, ret, EXCEPTION_MEMBER_PRINT_STACK_TRACE,
+                         &value, CRB_TRUE);
+
+    CRB_shrink_stack(inter, stack_count);
+
+    return ret;
+}
+
 static void
 gc_mark(CRB_Object *obj)
 {
