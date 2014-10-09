@@ -166,31 +166,7 @@ CRB_create_array(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
 }
 
 void
-crb_array_add(CRB_Interpreter *inter, CRB_Object *obj, CRB_Value v)
-{
-    int new_size;
-
-    DBG_assert(obj->type == ARRAY_OBJECT, ("bad type..%d\n", obj->type));
-
-    check_gc(inter);
-    if (obj->u.array.size + 1 > obj->u.array.alloc_size) {
-        new_size = obj->u.array.alloc_size * 2;
-        if (new_size == 0
-            || new_size - obj->u.array.alloc_size > ARRAY_ALLOC_SIZE) {
-            new_size = obj->u.array.alloc_size + ARRAY_ALLOC_SIZE;
-        }
-        obj->u.array.array = MEM_realloc(obj->u.array.array,
-                                         new_size * sizeof(CRB_Value));
-        inter->heap.current_heap_size
-            += (new_size - obj->u.array.alloc_size) * sizeof(CRB_Value);
-        obj->u.array.alloc_size = new_size;
-    }
-    obj->u.array.array[obj->u.array.size] = v;
-    obj->u.array.size++;
-}
-
-void
-crb_array_resize(CRB_Interpreter *inter, CRB_Object *obj, int new_size)
+CRB_array_resize(CRB_Interpreter *inter, CRB_Object *obj, int new_size)
 {
     int new_alloc_size;
     CRB_Boolean need_realloc;
@@ -225,6 +201,57 @@ crb_array_resize(CRB_Interpreter *inter, CRB_Object *obj, int new_size)
         obj->u.array.array[i].type = CRB_NULL_VALUE;
     }
     obj->u.array.size = new_size;
+}
+
+void
+CRB_array_add(CRB_Interpreter *inter, CRB_Object *obj, CRB_Value *v)
+{
+    DBG_assert(obj->type == ARRAY_OBJECT, ("bad type..%d\n", obj->type));
+
+    CRB_array_resize(inter, obj, obj->u.array.size + 1);
+    obj->u.array.array[obj->u.array.size-1] = *v;
+}
+
+void
+CRB_array_insert(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                 CRB_Object *obj, int pos,
+                 CRB_Value *new_value, int line_number)
+{
+    int i;
+    DBG_assert(obj->type == ARRAY_OBJECT, ("bad type..%d\n", obj->type));
+
+    if (pos < 0 || pos > obj->u.array.size) {
+        crb_runtime_error(inter, env, line_number,
+                          ARRAY_INDEX_OUT_OF_BOUNDS_ERR,
+                          CRB_INT_MESSAGE_ARGUMENT, "size", obj->u.array.size,
+                          CRB_INT_MESSAGE_ARGUMENT, "index", pos,
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+    CRB_array_resize(inter, obj, obj->u.array.size + 1);
+    for (i = obj->u.array.size-2; i >= pos; i--) {
+        obj->u.array.array[i+1] = obj->u.array.array[i];
+    }
+    obj->u.array.array[pos] = *new_value;
+}
+
+void
+CRB_array_remove(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                 CRB_Object *obj, int pos, int line_number)
+{
+    int i;
+
+    DBG_assert(obj->type == ARRAY_OBJECT, ("bad type..%d\n", obj->type));
+    if (pos < 0 || pos > obj->u.array.size-1) {
+        crb_runtime_error(inter, env, line_number,
+                          ARRAY_INDEX_OUT_OF_BOUNDS_ERR,
+                          CRB_INT_MESSAGE_ARGUMENT, "size", obj->u.array.size,
+                          CRB_INT_MESSAGE_ARGUMENT, "index", pos,
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+    for (i = pos+1; i < obj->u.array.size; i++) {
+        obj->u.array.array[i-1] = obj->u.array.array[i];
+    }
+    CRB_array_resize(inter, obj, obj->u.array.size - 1);
 }
 
 static void
