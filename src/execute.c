@@ -235,6 +235,105 @@ execute_for_statement(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     return result;
 }
 
+static CRB_Value *
+assign_to_variable(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                   int line_number, char *name, CRB_Value *value)
+{
+    CRB_Value *ret;
+
+    ret = crb_get_identifier_lvalue(inter, env, line_number, name);
+    if (ret == NULL) {
+        if (env != NULL) {
+            ret = CRB_add_local_variable(inter, env, name, value, CRB_FALSE);
+        } else {
+            if (CRB_search_function(inter, name)) {
+                crb_runtime_error(inter, env, line_number,
+                                  FUNCTION_EXISTS_ERR,
+                                  CRB_STRING_MESSAGE_ARGUMENT, "name",
+                                  name,
+                                  CRB_MESSAGE_ARGUMENT_END);
+            }
+            ret = CRB_add_global_variable(inter,  name, value, CRB_FALSE);
+        }
+    } else {
+        *ret = *value;
+    }
+
+    return ret;
+}
+
+static StatementResult
+execute_foreach_statement(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                          Statement *statement)
+{
+    StatementResult result;
+    CRB_Value   *collection;
+    CRB_Value   iterator;
+    CRB_Value   *var;
+    CRB_Value   is_done;
+    int stack_count = 0;
+    CRB_Value   temp;
+
+    result.type = NORMAL_STATEMENT_RESULT;
+
+    collection
+        = crb_eval_and_peek_expression(inter, env,
+                                       statement->u.foreach_s.collection);
+    stack_count++;
+    collection = CRB_peek_stack(inter, 0);
+    
+    iterator = CRB_call_method(inter, env, statement->line_number,
+                               collection->u.object, ITERATOR_METHOD_NAME,
+                               0, NULL);
+    CRB_push_value(inter, &iterator);
+    stack_count++;
+
+    temp.type = CRB_NULL_VALUE;
+    var = assign_to_variable(inter, env, statement->line_number,
+                             statement->u.foreach_s.variable,
+                             &temp);
+    for (;;) {
+        is_done = CRB_call_method(inter, env, statement->line_number,
+                                  iterator.u.object, IS_DONE_METHOD_NAME,
+                                  0, NULL);
+        if (is_done.type != CRB_BOOLEAN_VALUE) {
+                crb_runtime_error(inter, env,
+                                  statement->line_number,
+                                  NOT_BOOLEAN_TYPE_ERR,
+                                  CRB_MESSAGE_ARGUMENT_END);
+        }
+        if (is_done.u.boolean_value)
+            break;
+
+        *var = CRB_call_method(inter, env, statement->line_number,
+                               iterator.u.object, CURRENT_ITEM_METHOD_NAME,
+                               0, NULL);
+
+        result = crb_execute_statement_list(inter, env,
+                                            statement->u.for_s.block
+                                            ->statement_list);
+        if (result.type == RETURN_STATEMENT_RESULT) {
+            break;
+        } else if (result.type == BREAK_STATEMENT_RESULT) {
+            result.type = compare_labels(result.u.label,
+                                         statement->u.for_s.label,
+                                         result.type);
+            break;
+        } else if (result.type == CONTINUE_STATEMENT_RESULT) {
+            result.type = compare_labels(result.u.label,
+                                         statement->u.for_s.label,
+                                         result.type);
+        }
+
+        CRB_call_method(inter, env, statement->line_number,
+                        iterator.u.object, NEXT_METHOD_NAME,
+                        0, NULL);
+    }
+    CRB_shrink_stack(inter, stack_count);
+
+    return result;
+}
+
 static StatementResult
 execute_return_statement(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
                          Statement *statement)
