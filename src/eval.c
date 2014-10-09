@@ -44,6 +44,18 @@ shrink_stack(CRB_Interpreter *inter, int shrink_size)
     inter->stack.stack_pointer -= shrink_size;
 }
 
+int
+crb_get_stack_pointer(CRB_Interpreter *inter)
+{
+    return inter->stack.stack_pointer;
+}
+
+void
+crb_set_stack_pointer(CRB_Interpreter *inter, int stack_pointer)
+{
+    inter->stack.stack_pointer = stack_pointer;
+}
+
 static void
 eval_boolean_expression(CRB_Interpreter *inter, CRB_Boolean boolean_value)
 {
@@ -80,7 +92,18 @@ eval_string_expression(CRB_Interpreter *inter, CRB_Char *string_value)
     CRB_Value   v;
 
     v.type = CRB_STRING_VALUE;
-    v.u.object = crb_literal_to_crb_string(inter, string_value);
+    v.u.object = crb_literal_to_crb_string_i(inter, string_value);
+    push_value(inter, &v);
+}
+
+static void
+eval_regexp_expression(CRB_Interpreter *inter, CRB_Regexp *regexp_value)
+{
+    CRB_Value   v;
+
+    v.type = CRB_NATIVE_POINTER_VALUE;
+    v.u.object = crb_create_native_pointer_i(inter, regexp_value,
+                                             crb_get_regexp_info());
     push_value(inter, &v);
 }
 
@@ -94,19 +117,20 @@ eval_null_expression(CRB_Interpreter *inter)
     push_value(inter, &v);
 }
 
-static Variable *
+static CRB_Value *
 search_global_variable_from_env(CRB_Interpreter *inter,
-                                CRB_LocalEnvironment *env, char *name)
+                                CRB_LocalEnvironment *env, char *name,
+                                CRB_Boolean *is_final)
 {
     GlobalVariableRef *pos;
 
     if (env == NULL) {
-        return crb_search_global_variable(inter, name);
+        return CRB_search_global_variable_w(inter, name, is_final);
     }
 
     for (pos = env->global_variable; pos; pos = pos->next) {
-        if (!strcmp(pos->variable->name, name)) {
-            return pos->variable;
+        if (!strcmp(pos->name, name)) {
+            return &pos->variable->value;
         }
     }
 
@@ -117,55 +141,74 @@ static void
 eval_identifier_expression(CRB_Interpreter *inter,
                            CRB_LocalEnvironment *env, Expression *expr)
 {
-    CRB_Value   v;
-    Variable    *vp;
+    CRB_Value *vp;
+    CRB_FunctionDefinition *func;
+    CRB_Boolean is_final; /* dummy */
 
-    vp = crb_search_local_variable(env, expr->u.identifier);  
+    vp = CRB_search_local_variable(env, expr->u.identifier);
     if (vp != NULL) {
-        v = vp->value;
-    } else {
-        vp = search_global_variable_from_env(inter, env, expr->u.identifier);
-        if (vp != NULL) {
-            v = vp->value;
-        } else {
-            crb_runtime_error(expr->line_number, VARIABLE_NOT_FOUND_ERR,
-                              STRING_MESSAGE_ARGUMENT,
-                              "name", expr->u.identifier,
-                              MESSAGE_ARGUMENT_END);
-        } 
+        push_value(inter, vp);
+        return;
     }
-    push_value(inter, &v);
+
+    vp = search_global_variable_from_env(inter, env, expr->u.identifier,
+                                         &is_final);
+    if (vp != NULL) {
+        push_value(inter, vp);
+        return;
+    }
+
+    func = CRB_search_function(inter, expr->u.identifier);
+    if (func != NULL) {
+        CRB_Value       v;
+        v.type = CRB_CLOSURE_VALUE;
+        v.u.closure.function = func;
+        v.u.closure.environment = NULL;
+        push_value(inter, &v);
+        return;
+    }
+
+    crb_runtime_error(inter, env, expr->line_number, VARIABLE_NOT_FOUND_ERR,
+                      CRB_STRING_MESSAGE_ARGUMENT,
+                      "name", expr->u.identifier,
+                      CRB_MESSAGE_ARGUMENT_END);
 }
 
 static void eval_expression(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
                             Expression *expr);
 
-static CRB_Value *
-get_identifier_lvalue(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
-                      char *identifier)
+CRB_Value *
+crb_get_identifier_lvalue(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                          int line_number, char *identifier)
 {
-    Variable *new_var;
-    Variable *left;
+    CRB_Value *left;
+    CRB_Boolean is_final = CRB_FALSE;
 
-    left = crb_search_local_variable(env, identifier);
+    left = CRB_search_local_variable_w(env, identifier, &is_final);
     if (left == NULL) {
-        left = search_global_variable_from_env(inter, env, identifier);
+        left = search_global_variable_from_env(inter, env, identifier,
+                                               &is_final);
     }
-    if (left != NULL)
-        return &left->value;
-
-    if (env != NULL) {
-        new_var = crb_add_local_variable(env, identifier);
-        left = new_var;
-    } else {
-        new_var = crb_add_global_variable(inter, identifier);
-        left = new_var;
+    if (is_final) {
+        crb_runtime_error(inter, env, line_number,
+                          ASSIGN_TO_FINAL_VARIABLE_ERR,
+                          CRB_STRING_MESSAGE_ARGUMENT, "name", identifier,
+                          CRB_MESSAGE_ARGUMENT_END);
     }
 
-    return &left->value;
+    return left;
 }
 
-CRB_Value *
+static void
+eval_comma_expression(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                      Expression *expr)
+{
+    eval_expression(inter, env, expr->u.comma.left);
+    pop_value(inter);
+    eval_expression(inter, env, expr->u.comma.right);
+}
+
+static CRB_Value *
 get_array_element_lvalue(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
                          Expression *expr)
 {
@@ -178,88 +221,96 @@ get_array_element_lvalue(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     array = pop_value(inter);
 
     if (array.type != CRB_ARRAY_VALUE) {
-        crb_runtime_error(expr->line_number, INDEX_OPERAND_NOT_ARRAY_ERR,
-                          MESSAGE_ARGUMENT_END);
+        crb_runtime_error(inter, env, expr->line_number,
+                          INDEX_OPERAND_NOT_ARRAY_ERR,
+                          CRB_MESSAGE_ARGUMENT_END);
     }
     if (index.type != CRB_INT_VALUE) {
-        crb_runtime_error(expr->line_number, INDEX_OPERAND_NOT_INT_ERR,
-                          MESSAGE_ARGUMENT_END);
+        crb_runtime_error(inter, env, expr->line_number,
+                          INDEX_OPERAND_NOT_INT_ERR,
+                          CRB_MESSAGE_ARGUMENT_END);
     }
 
     if (index.u.int_value < 0
         || index.u.int_value >= array.u.object->u.array.size) {
-        crb_runtime_error(expr->line_number, ARRAY_INDEX_OUT_OF_BOUNDS_ERR,
-                          INT_MESSAGE_ARGUMENT,
+        crb_runtime_error(inter, env, expr->line_number,
+                          ARRAY_INDEX_OUT_OF_BOUNDS_ERR,
+                          CRB_INT_MESSAGE_ARGUMENT,
                           "size", array.u.object->u.array.size,
-                          INT_MESSAGE_ARGUMENT, "index", index.u.int_value,
-                          MESSAGE_ARGUMENT_END);
+                          CRB_INT_MESSAGE_ARGUMENT, "index", index.u.int_value,
+                          CRB_MESSAGE_ARGUMENT_END);
     }
     return &array.u.object->u.array.array[index.u.int_value];
 }
 
-CRB_Value *
+static CRB_Value *
+get_member_lvalue(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                  Expression *expr)
+{
+    CRB_Value assoc;
+    CRB_Value *dest;
+    CRB_Boolean is_final = CRB_FALSE;
+
+    eval_expression(inter, env, expr->u.member_expression.expression);
+    assoc = pop_value(inter);
+
+    if (assoc.type != CRB_ASSOC_VALUE) {
+        crb_runtime_error(inter, env, expr->line_number,
+                          NOT_OBJECT_MEMBER_UPDATE_ERR,
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+
+    dest = CRB_search_assoc_member_w(assoc.u.object,
+                                     expr->u.member_expression.member_name,
+                                     &is_final);
+    if (is_final) {
+        crb_runtime_error(inter, env, expr->line_number,
+                          ASSIGN_TO_FINAL_VARIABLE_ERR,
+                          CRB_STRING_MESSAGE_ARGUMENT, "name",
+                          expr->u.member_expression.member_name,
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+
+    return dest;
+}
+
+static CRB_Value *
 get_lvalue(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
-           Expression *expr)
+               Expression *expr)
 {
     CRB_Value   *dest;
 
     if (expr->type == IDENTIFIER_EXPRESSION) {
-        dest = get_identifier_lvalue(inter, env, expr->u.identifier);
+        dest = crb_get_identifier_lvalue(inter, env, expr->line_number,
+                                         expr->u.identifier);
     } else if (expr->type == INDEX_EXPRESSION) {
         dest = get_array_element_lvalue(inter, env, expr);
+    } else if (expr->type == MEMBER_EXPRESSION) {
+        dest = get_member_lvalue(inter, env, expr);
     } else {
-        crb_runtime_error(expr->line_number, NOT_LVALUE_ERR,
-                          MESSAGE_ARGUMENT_END);
+        crb_runtime_error(inter, env, expr->line_number, NOT_LVALUE_ERR,
+                          CRB_MESSAGE_ARGUMENT_END);
     }
 
     return dest;
 }
 
 static void
-eval_assign_expression(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
-                       Expression *left, Expression *expression)
-{
-    CRB_Value   *src;
-    CRB_Value   *dest;
-
-    eval_expression(inter, env, expression);
-    src = peek_stack(inter, 0);
-
-    dest = get_lvalue(inter, env, left);
-    *dest = *src;
-}
-
-static CRB_Boolean
-eval_binary_boolean(CRB_Interpreter *inter, ExpressionType operator,
-                    CRB_Boolean left, CRB_Boolean right, int line_number)
-{
-    CRB_Boolean result;
-
-    if (operator == EQ_EXPRESSION) {
-        result = left == right;
-    } else if (operator == NE_EXPRESSION) {
-        result = left != right;
-    } else {
-        char *op_str = crb_get_operator_string(operator);
-        crb_runtime_error(line_number, NOT_BOOLEAN_OPERATOR_ERR,
-                          STRING_MESSAGE_ARGUMENT, "operator", op_str,
-                          MESSAGE_ARGUMENT_END);
-    }
-
-    return result;
-}
-
-static void
-eval_binary_int(CRB_Interpreter *inter, ExpressionType operator,
+eval_binary_int(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                ExpressionType operator,
                 int left, int right,
                 CRB_Value *result, int line_number)
 {
-    if (dkc_is_math_operator(operator)) {
+    if (crb_is_math_operator(operator)) {
         result->type = CRB_INT_VALUE;
-    } else if (dkc_is_compare_operator(operator)) {
+    } else if (crb_is_compare_operator(operator)) {
         result->type = CRB_BOOLEAN_VALUE;
     } else {
-        DBG_panic(("operator..%d\n", operator));
+        DBG_assert(crb_is_logical_operator(operator),
+                   ("operator..%d\n", operator));
+        crb_runtime_error(inter, env, line_number,
+                          LOGICAL_OP_INTEGER_OPERAND_ERR,
+                          CRB_MESSAGE_ARGUMENT_END);
     }
 
     switch (operator) {
@@ -267,9 +318,11 @@ eval_binary_int(CRB_Interpreter *inter, ExpressionType operator,
     case INT_EXPRESSION:        /* FALLTHRU */
     case DOUBLE_EXPRESSION:     /* FALLTHRU */
     case STRING_EXPRESSION:     /* FALLTHRU */
+    case REGEXP_EXPRESSION:     /* FALLTHRU */
     case IDENTIFIER_EXPRESSION: /* FALLTHRU */
+    case COMMA_EXPRESSION:      /* FALLTHRU */
     case ASSIGN_EXPRESSION:
-        DBG_panic(("bad case...%d", operator));
+        DBG_assert(0, ("bad case...%d", operator));
         break;
     case ADD_EXPRESSION:
         result->u.int_value = left + right;
@@ -281,14 +334,18 @@ eval_binary_int(CRB_Interpreter *inter, ExpressionType operator,
         result->u.int_value = left * right;
         break;
     case DIV_EXPRESSION:
+        if (right == 0) {
+            crb_runtime_error(inter, env, line_number, DIVISION_BY_ZERO_ERR,
+                              CRB_MESSAGE_ARGUMENT_END);
+        }
         result->u.int_value = left / right;
         break;
     case MOD_EXPRESSION:
+        if (right == 0) {
+            crb_runtime_error(inter, env, line_number, DIVISION_BY_ZERO_ERR,
+                              CRB_MESSAGE_ARGUMENT_END);
+        }
         result->u.int_value = left % right;
-        break;
-    case LOGICAL_AND_EXPRESSION:        /* FALLTHRU */
-    case LOGICAL_OR_EXPRESSION:
-        DBG_panic(("bad case...%d", operator));
         break;
     case EQ_EXPRESSION:
         result->u.boolean_value = left == right;
@@ -308,31 +365,40 @@ eval_binary_int(CRB_Interpreter *inter, ExpressionType operator,
     case LE_EXPRESSION:
         result->u.boolean_value = left <= right;
         break;
-    case MINUS_EXPRESSION:              /* FALLTHRU */
+    case LOGICAL_AND_EXPRESSION:        /* FALLTHRU */
+    case LOGICAL_OR_EXPRESSION: /* FALLTHRU */
+    case MINUS_EXPRESSION:      /* FALLTHRU */
+    case LOGICAL_NOT_EXPRESSION:        /* FALLTHRU */
     case FUNCTION_CALL_EXPRESSION:      /* FALLTHRU */
-    case METHOD_CALL_EXPRESSION:        /* FALLTHRU */
+    case MEMBER_EXPRESSION:     /* FALLTHRU */
     case NULL_EXPRESSION:       /* FALLTHRU */
     case ARRAY_EXPRESSION:      /* FALLTHRU */
+    case CLOSURE_EXPRESSION:    /* FALLTHRU */
     case INDEX_EXPRESSION:      /* FALLTHRU */
     case INCREMENT_EXPRESSION:  /* FALLTHRU */
     case DECREMENT_EXPRESSION:  /* FALLTHRU */
     case EXPRESSION_TYPE_COUNT_PLUS_1:  /* FALLTHRU */
     default:
-        DBG_panic(("bad case...%d", operator));
+        DBG_assert(0, ("bad case...%d", operator));
     }
 }
 
 static void
-eval_binary_double(CRB_Interpreter *inter, ExpressionType operator,
+eval_binary_double(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                   ExpressionType operator,
                    double left, double right,
                    CRB_Value *result, int line_number)
 {
-    if (dkc_is_math_operator(operator)) {
+    if (crb_is_math_operator(operator)) {
         result->type = CRB_DOUBLE_VALUE;
-    } else if (dkc_is_compare_operator(operator)) {
+    } else if (crb_is_compare_operator(operator)) {
         result->type = CRB_BOOLEAN_VALUE;
     } else {
-        DBG_panic(("operator..%d\n", operator));
+        DBG_assert(crb_is_logical_operator(operator),
+                   ("operator..%d\n", operator));
+        crb_runtime_error(inter, env, line_number,
+                          LOGICAL_OP_DOUBLE_OPERAND_ERR,
+                          CRB_MESSAGE_ARGUMENT_END);
     }
 
     switch (operator) {
@@ -340,9 +406,11 @@ eval_binary_double(CRB_Interpreter *inter, ExpressionType operator,
     case INT_EXPRESSION:        /* FALLTHRU */
     case DOUBLE_EXPRESSION:     /* FALLTHRU */
     case STRING_EXPRESSION:     /* FALLTHRU */
+    case REGEXP_EXPRESSION:     /* FALLTHRU */
     case IDENTIFIER_EXPRESSION: /* FALLTHRU */
+    case COMMA_EXPRESSION:      /* FALLTHRU */
     case ASSIGN_EXPRESSION:
-        DBG_panic(("bad case...%d", operator));
+        DBG_assert(0, ("bad case...%d", operator));
         break;
     case ADD_EXPRESSION:
         result->u.double_value = left + right;
@@ -359,39 +427,39 @@ eval_binary_double(CRB_Interpreter *inter, ExpressionType operator,
     case MOD_EXPRESSION:
         result->u.double_value = fmod(left, right);
         break;
-    case LOGICAL_AND_EXPRESSION:        /* FALLTHRU */
-    case LOGICAL_OR_EXPRESSION:
-        DBG_panic(("bad case...%d", operator));
-        break;
     case EQ_EXPRESSION:
-        result->u.int_value = left == right;
+        result->u.boolean_value = left == right;
         break;
     case NE_EXPRESSION:
-        result->u.int_value = left != right;
+        result->u.boolean_value = left != right;
         break;
     case GT_EXPRESSION:
-        result->u.int_value = left > right;
+        result->u.boolean_value = left > right;
         break;
     case GE_EXPRESSION:
-        result->u.int_value = left >= right;
+        result->u.boolean_value = left >= right;
         break;
     case LT_EXPRESSION:
-        result->u.int_value = left < right;
+        result->u.boolean_value = left < right;
         break;
     case LE_EXPRESSION:
-        result->u.int_value = left <= right;
+        result->u.boolean_value = left <= right;
         break;
+    case LOGICAL_AND_EXPRESSION:        /* FALLTHRU */
+    case LOGICAL_OR_EXPRESSION:         /* FALLTHRU */
     case MINUS_EXPRESSION:              /* FALLTHRU */
+    case LOGICAL_NOT_EXPRESSION:        /* FALLTHRU */
     case FUNCTION_CALL_EXPRESSION:      /* FALLTHRU */
-    case METHOD_CALL_EXPRESSION:        /* FALLTHRU */
+    case MEMBER_EXPRESSION:     /* FALLTHRU */
     case NULL_EXPRESSION:               /* FALLTHRU */
     case ARRAY_EXPRESSION:      /* FALLTHRU */
+    case CLOSURE_EXPRESSION:    /* FALLTHRU */
     case INDEX_EXPRESSION:      /* FALLTHRU */
     case INCREMENT_EXPRESSION:
     case DECREMENT_EXPRESSION:
     case EXPRESSION_TYPE_COUNT_PLUS_1:  /* FALLTHRU */
     default:
-        DBG_panic(("bad default...%d", operator));
+        DBG_assert(0, ("bad default...%d", operator));
     }
 }
 
