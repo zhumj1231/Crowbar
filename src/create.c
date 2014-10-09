@@ -2,46 +2,58 @@
 #include "DBG.h"
 #include "crowbar.h"
 
-void
-crb_function_define(char *identifier, ParameterList *parameter_list,
-                    Block *block)
+static CRB_FunctionDefinition *
+create_function_definition(char *identifier, CRB_ParameterList *parameter_list,
+                           CRB_Boolean is_closure, CRB_Block *block)
 {
-    FunctionDefinition *f;
-    CRB_Interpreter *inter;
+    CRB_FunctionDefinition *f;
 
-    if (crb_search_function(identifier)) {
-        crb_compile_error(FUNCTION_MULTIPLE_DEFINE_ERR,
-                          STRING_MESSAGE_ARGUMENT, "name", identifier,
-                          MESSAGE_ARGUMENT_END);
-        return;
-    }
-    inter = crb_get_current_interpreter();
-
-    f = crb_malloc(sizeof(FunctionDefinition));
+    f = crb_malloc(sizeof(CRB_FunctionDefinition));
     f->name = identifier;
-    f->type = CROWBAR_FUNCTION_DEFINITION;
+    f->type = CRB_CROWBAR_FUNCTION_DEFINITION;
+    f->is_closure = is_closure;
     f->u.crowbar_f.parameter = parameter_list;
     f->u.crowbar_f.block = block;
+
+    return f;
+}
+
+void
+crb_function_define(char *identifier, CRB_ParameterList *parameter_list,
+                    CRB_Block *block)
+{
+    CRB_FunctionDefinition *f;
+    CRB_Interpreter *inter;
+
+    if (crb_search_function_in_compile(identifier)) {
+        crb_compile_error(FUNCTION_MULTIPLE_DEFINE_ERR,
+                          CRB_STRING_MESSAGE_ARGUMENT, "name", identifier,
+                          CRB_MESSAGE_ARGUMENT_END);
+        return;
+    }
+    f = create_function_definition(identifier, parameter_list, CRB_FALSE,
+                                   block);
+    inter = crb_get_current_interpreter();
     f->next = inter->function_list;
     inter->function_list = f;
 }
 
-ParameterList *
+CRB_ParameterList *
 crb_create_parameter(char *identifier)
 {
-    ParameterList       *p;
+    CRB_ParameterList   *p;
 
-    p = crb_malloc(sizeof(ParameterList));
+    p = crb_malloc(sizeof(CRB_ParameterList));
     p->name = identifier;
     p->next = NULL;
 
     return p;
 }
 
-ParameterList *
-crb_chain_parameter(ParameterList *list, char *identifier)
+CRB_ParameterList *
+crb_chain_parameter(CRB_ParameterList *list, char *identifier)
 {
-    ParameterList *pos;
+    CRB_ParameterList *pos;
 
     for (pos = list; pos->next; pos = pos->next)
         ;
