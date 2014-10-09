@@ -357,6 +357,193 @@ CRB_search_assoc_member_w(CRB_Object *assoc, char *member_name,
     return ret;
 }
 
+CRB_Object *
+crb_create_scope_chain(CRB_Interpreter *inter)
+{
+    CRB_Object *ret;
+
+    ret = alloc_object(inter, SCOPE_CHAIN_OBJECT);
+    ret->u.scope_chain.frame = NULL;
+    ret->u.scope_chain.next = NULL;
+
+    return ret;
+}
+
+CRB_Object *
+crb_create_native_pointer_i(CRB_Interpreter *inter, void *pointer,
+                            CRB_NativePointerInfo *info)
+{
+    CRB_Object *ret;
+
+    ret = alloc_object(inter, NATIVE_POINTER_OBJECT);
+    ret->u.native_pointer.pointer = pointer;
+    ret->u.native_pointer.info = info;
+
+    return ret;
+}
+
+CRB_Object *
+CRB_create_native_pointer(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                          void *pointer, CRB_NativePointerInfo *info)
+{
+    CRB_Object *ret;
+
+    ret = crb_create_native_pointer_i(inter, pointer, info);
+    add_ref_in_native_method(env, ret);
+
+    return ret;
+}
+
+CRB_NativePointerInfo *
+CRB_get_native_pointer_type(CRB_Object *native_pointer)
+{
+    return native_pointer->u.native_pointer.info;
+}
+
+CRB_Boolean
+CRB_check_native_pointer_type(CRB_Object *native_pointer,
+                              CRB_NativePointerInfo *info)
+{
+    return native_pointer->u.native_pointer.info == info;
+}
+
+static int
+count_stack_trace_depth(CRB_LocalEnvironment *top)
+{
+    CRB_LocalEnvironment *pos;
+    int count = 0;
+
+    for (pos = top; pos; pos = pos->next) {
+        count++;
+    }
+
+    return count + 1;
+}
+
+static CRB_Object *
+create_stack_trace_line(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                        char *func_name, int line_number)
+{
+    CRB_Char    *wc_func_name;
+    CRB_Object  *new_line;
+    CRB_Value   new_line_value;
+    CRB_Value   value;
+    int         stack_count = 0;
+
+    new_line = crb_create_assoc_i(inter);
+    new_line_value.type = CRB_ASSOC_VALUE;
+    new_line_value.u.object = new_line;
+    CRB_push_value(inter, &new_line_value);
+    stack_count++;
+
+    wc_func_name = CRB_mbstowcs_alloc(inter, env, line_number, func_name);
+    DBG_assert(wc_func_name != NULL, ("wc_func_name is null.\n"));
+
+    value.type = CRB_STRING_VALUE;
+    value.u.object = crb_create_crowbar_string_i(inter, wc_func_name);
+    CRB_push_value(inter, &value);
+    stack_count++;
+
+    CRB_add_assoc_member(inter, new_line, EXCEPTION_MEMBER_FUNCTION_NAME,
+                         &value, CRB_TRUE);
+
+    value.type = CRB_INT_VALUE;
+    value.u.int_value = line_number;
+    CRB_add_assoc_member(inter, new_line, EXCEPTION_MEMBER_LINE_NUMBER,
+                         &value, CRB_TRUE);
+
+    CRB_shrink_stack(inter, stack_count);
+
+    return new_line;
+}
+
+static CRB_Value
+print_stack_trace(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                  int arg_count, CRB_Value *args)
+{
+    CRB_Value *message;
+    CRB_Value *stack_trace;
+    CRB_Value ret;
+    int i;
+
+    message = CRB_search_local_variable(env, EXCEPTION_MEMBER_MESSAGE);
+    if (message == NULL) {
+        crb_runtime_error(inter, env, __LINE__,
+                          EXCEPTION_HAS_NO_MESSAGE_ERR,
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+    if (message->type != CRB_STRING_VALUE) {
+        crb_runtime_error(inter, env, __LINE__,
+                          EXCEPTION_MESSAGE_IS_NOT_STRING_ERR,
+                          CRB_STRING_MESSAGE_ARGUMENT, "type",
+                          CRB_get_type_name(message->type),
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+    CRB_print_wcs_ln(stderr, message->u.object->u.string.string);
+
+    stack_trace = CRB_search_local_variable(env, EXCEPTION_MEMBER_STACK_TRACE);
+    if (stack_trace == NULL) {
+        crb_runtime_error(inter, env, __LINE__,
+                          EXCEPTION_HAS_NO_STACK_TRACE_ERR,
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+    if (stack_trace->type != CRB_ARRAY_VALUE) {
+        crb_runtime_error(inter, env, __LINE__,
+                          STACK_TRACE_IS_NOT_ARRAY_ERR,
+                          CRB_STRING_MESSAGE_ARGUMENT, "type",
+                          CRB_get_type_name(stack_trace->type),
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+
+    for (i = 0; i < stack_trace->u.object->u.array.size; i++) {
+        CRB_Object *assoc;
+        CRB_Value *line_number;
+        CRB_Value *function_name;
+        CRB_Char *str;
+
+        if (stack_trace->u.object->u.array.array[i].type != CRB_ASSOC_VALUE) {
+            crb_runtime_error(inter, env, __LINE__,
+                              STACK_TRACE_LINE_IS_NOT_ASSOC_ERR,
+                              CRB_MESSAGE_ARGUMENT_END);
+        }
+        assoc = stack_trace->u.object->u.array.array[i].u.object;
+
+        line_number
+            = CRB_search_assoc_member(assoc,
+                                      EXCEPTION_MEMBER_LINE_NUMBER);
+        if (line_number == NULL
+            || line_number->type != CRB_INT_VALUE) {
+            crb_runtime_error(inter, env, __LINE__,
+                              STACK_TRACE_LINE_HAS_NO_LINE_NUMBER_ERR,
+                              CRB_MESSAGE_ARGUMENT_END);
+        }
+        function_name
+            = CRB_search_assoc_member(assoc,
+                                      EXCEPTION_MEMBER_FUNCTION_NAME);
+        if (function_name == NULL
+            || function_name->type != CRB_STRING_VALUE) {
+            crb_runtime_error(inter, env, __LINE__,
+                              STACK_TRACE_LINE_HAS_NO_FUNC_NAME_ERR,
+                              CRB_MESSAGE_ARGUMENT_END);
+        }
+        str = CRB_value_to_string(inter, NULL,
+                                  line_number->u.int_value,
+                                  function_name);
+        CRB_print_wcs(stderr, str);
+        MEM_free(str);
+            
+        fprintf(stderr, " at ");
+
+        str = CRB_value_to_string(inter, NULL,
+                                  line_number->u.int_value, line_number);
+        CRB_print_wcs_ln(stderr, str);
+        MEM_free(str);
+    }
+    
+    ret.type = CRB_NULL_VALUE;
+    return ret;
+}
+
 static void
 gc_mark(CRB_Object *obj)
 {
