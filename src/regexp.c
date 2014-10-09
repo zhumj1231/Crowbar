@@ -286,3 +286,161 @@ nv_match_proc(CRB_Interpreter *inter,
 
     return result;
 }
+
+static void
+replace_matched_place(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                      CRB_Char *replacement, OnigUChar *subject,
+                      OnigRegion *region, VString *vs)
+{
+    int i;
+    char g_idx_str[REGEXP_GROUP_INDEX_MAX_COLUMN+1];
+    int g_idx_col;
+    int scanf_result;
+    int g_idx;
+    int g_pos;
+
+    for (i = 0; replacement[i] != L'\0'; i++) {
+        if (replacement[i] != L'\\') {
+            crb_vstr_append_character(vs, replacement[i]);
+            continue;
+        }
+        if (replacement[i+1] == L'\\') {
+            crb_vstr_append_character(vs, replacement[i]);
+            i++;
+            continue;
+        }
+        i++;
+        for (g_idx_col = 0; g_idx_col < REGEXP_GROUP_INDEX_MAX_COLUMN;
+             g_idx_col++) {
+            if (CRB_iswdigit(replacement[i])) {
+                if (g_idx_col >= REGEXP_GROUP_INDEX_MAX_COLUMN) {
+                    MEM_free(subject);
+                    MEM_free(vs->string);
+                    onig_region_free(region, 1);
+                    crb_runtime_error(inter, env, __LINE__,
+                                      GROUP_INDEX_OVERFLOW_ERR,
+                                      CRB_MESSAGE_ARGUMENT_END);
+                }
+                g_idx_str[g_idx_col] = '0' + (replacement[i] - L'0');
+                i++;
+            } else {
+                i--;
+                break;
+            }
+        }
+        if (g_idx_col == 0) {
+            crb_vstr_append_character(vs, L'\\');
+            continue;
+        }
+        g_idx_str[g_idx_col] = '\0';
+
+        scanf_result = sscanf(g_idx_str, "%d", &g_idx);
+        DBG_assert(scanf_result == 1, ("sscanf failed. str..%s, result..%d",
+                                       g_idx_str, scanf_result));
+        if (g_idx <= 0 || g_idx >= region->num_regs) {
+            MEM_free(subject);
+            MEM_free(vs->string);
+            onig_region_free(region, 1);
+            crb_runtime_error(inter, env, __LINE__,
+                              NO_SUCH_GROUP_INDEX_ERR,
+                              CRB_INT_MESSAGE_ARGUMENT, "g_idx", g_idx,
+                              CRB_MESSAGE_ARGUMENT_END);
+        }
+
+        for (g_pos = region->beg[g_idx]; g_pos < region->end[g_idx];
+             g_pos += 2) {
+            crb_vstr_append_character(vs, (subject[g_pos] << 8)
+                                      + subject[g_pos+1]);
+        }
+    }
+}
+
+static CRB_Object *
+replace_crb_if(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+               CRB_Regexp* crb_reg,
+               CRB_Object *replacement, CRB_Object *crb_subject,
+               int match_limit)
+{
+    OnigUChar *subject;
+    OnigUChar *end_p;
+    OnigUChar *at_p;
+    OnigUChar *next_at;
+    CRB_Boolean matched;
+    OnigRegion *region;
+    int matched_count = 0;
+    int i;
+    VString  vs;
+    CRB_Object *result;
+
+    subject = encode_utf16_be(crb_subject->u.string.string);
+    if (subject == NULL) {
+        crb_runtime_error(inter, env, __LINE__, UNEXPECTED_WIDE_STRING_ERR,
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+    end_p = subject
+        + onigenc_str_bytelen_null(ONIG_ENCODING_UTF16_BE, subject);
+    at_p = subject;
+
+    region = onig_region_new();
+
+    crb_vstr_clear(&vs);
+
+    while (matched_count < match_limit) {
+        matched = match_sub(inter, env, crb_reg->regexp, subject, end_p,
+                            at_p, &next_at, region);
+        if (!matched) {
+            break;
+        }
+        for (i = at_p - subject; i < region->beg[0]; i += 2) {
+            crb_vstr_append_character(&vs, (subject[i] << 8)
+                                      + subject[i+1]);
+        }
+        replace_matched_place(inter, env, replacement->u.string.string,
+                              subject, region, &vs);
+
+        matched_count++;
+        at_p = next_at;
+    }
+    if (matched_count == 0) {
+        MEM_free(subject);
+        onig_region_free(region, 1);
+        return crb_subject;
+    }
+    for (i = at_p - subject; i < end_p - subject; i += 2) {
+        crb_vstr_append_character(&vs, (subject[i] << 8) + subject[i+1]);
+    }
+    result = crb_create_crowbar_string_i(inter, vs.string);
+
+    MEM_free(subject);
+    onig_region_free(region, 1);
+
+    return result;
+}
+
+static CRB_Value
+nv_replace_proc(CRB_Interpreter *inter,
+                CRB_LocalEnvironment *env,
+                int arg_count, CRB_Value *args)
+{
+    static CRB_ValueType arg_type[] = {
+        CRB_NATIVE_POINTER_VALUE,       /* pattern */
+        CRB_STRING_VALUE,               /* replacement */
+        CRB_STRING_VALUE,               /* subject */
+    };
+    char *FUNC_NAME = "reg_replace";
+    CRB_Regexp *crb_reg;
+    CRB_Value result;
+    
+    CRB_check_argument(inter, env, arg_count, ARRAY_SIZE(arg_type),
+                       args, arg_type, FUNC_NAME);
+
+    crb_reg = CRB_object_get_native_pointer(args[0].u.object);
+
+    result.type = CRB_STRING_VALUE;
+    result.u.object
+        = replace_crb_if(inter, env, crb_reg,
+                         args[1].u.object, args[2].u.object, 1);
+
+    return result;
+}
+
