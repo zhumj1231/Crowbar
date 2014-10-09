@@ -470,3 +470,100 @@ nv_replace_all_proc(CRB_Interpreter *inter,
 
     return result;
 }
+
+static void
+add_splitted_string(CRB_Interpreter *inter, CRB_Object *array, VString *vs)
+{
+    CRB_Value str;
+
+    str.type = CRB_STRING_VALUE;
+    str.u.object = crb_create_crowbar_string_i(inter, vs->string);
+    CRB_push_value(inter, &str);
+
+    CRB_array_add(inter, array, &str);
+    
+    CRB_pop_value(inter);
+}
+
+static void
+split_crb_if(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+             CRB_Regexp* crb_reg, CRB_Object *crb_subject,
+             CRB_Value *result)
+{
+    OnigUChar *subject;
+    OnigUChar *end_p;
+    OnigUChar *at_p;
+    OnigUChar *next_at;
+    OnigRegion *region;
+    int i;
+    VString  vs;
+
+    subject = encode_utf16_be(crb_subject->u.string.string);
+    if (subject == NULL) {
+        crb_runtime_error(inter, env, __LINE__, UNEXPECTED_WIDE_STRING_ERR,
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+    end_p = subject
+        + onigenc_str_bytelen_null(ONIG_ENCODING_UTF16_BE, subject);
+    at_p = subject;
+
+    region = onig_region_new();
+
+    while (match_sub(inter, env, crb_reg->regexp, subject, end_p,
+                     at_p, &next_at, region)) {
+        crb_vstr_clear(&vs);
+        for (i = at_p - subject; i < region->beg[0]; i += 2) {
+            crb_vstr_append_character(&vs, (subject[i] << 8)
+                                      + subject[i+1]);
+        }
+        add_splitted_string(inter, result->u.object, &vs);
+
+        at_p = next_at;
+    }
+
+    crb_vstr_clear(&vs);
+    for (i = at_p - subject; i < end_p - subject; i += 2) {
+        crb_vstr_append_character(&vs, (subject[i] << 8) + subject[i+1]);
+    }
+    add_splitted_string(inter, result->u.object, &vs);
+
+    MEM_free(subject);
+    onig_region_free(region, 1);
+}
+
+static CRB_Value
+nv_split_proc(CRB_Interpreter *inter,
+              CRB_LocalEnvironment *env,
+              int arg_count, CRB_Value *args)
+{
+    static CRB_ValueType arg_type[] = {
+        CRB_NATIVE_POINTER_VALUE,       /* pattern */
+        CRB_STRING_VALUE,               /* subject */
+    };
+    char *FUNC_NAME = "reg_split";
+    CRB_Regexp *crb_reg;
+    CRB_Value result;
+    
+    CRB_check_argument(inter, env, arg_count, ARRAY_SIZE(arg_type),
+                       args, arg_type, FUNC_NAME);
+
+    crb_reg = CRB_object_get_native_pointer(args[0].u.object);
+
+    result.type = CRB_ARRAY_VALUE;
+    result.u.object = crb_create_array_i(inter, 0);
+    CRB_push_value(inter, &result);
+    
+    split_crb_if(inter, env, crb_reg, args[1].u.object, &result);
+    CRB_pop_value(inter);
+
+    return result;
+}
+
+void
+crb_add_regexp_functions(CRB_Interpreter *inter)
+{
+    CRB_add_native_function(inter, "reg_match", nv_match_proc);
+    CRB_add_native_function(inter, "reg_replace", nv_replace_proc);
+    CRB_add_native_function(inter, "reg_replace_all", nv_replace_all_proc);
+    CRB_add_native_function(inter, "reg_split", nv_split_proc);
+}
