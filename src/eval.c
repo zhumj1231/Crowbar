@@ -651,39 +651,62 @@ eval_assign_expression(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
 }
 
 static CRB_Boolean
-eval_compare_string(ExpressionType operator,
-                    CRB_Value *left, CRB_Value *right, int line_number)
+eval_binary_boolean(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                    ExpressionType operator,
+                    CRB_Boolean left, CRB_Boolean right, int line_number)
 {
     CRB_Boolean result;
-    int cmp;
-
-    cmp = CRB_wcscmp(left->u.object->u.string.string,
-                 right->u.object->u.string.string);
 
     if (operator == EQ_EXPRESSION) {
-        result = (cmp == 0);
+        result = left == right;
     } else if (operator == NE_EXPRESSION) {
-        result = (cmp != 0);
-    } else if (operator == GT_EXPRESSION) {
-        result = (cmp > 0);
-    } else if (operator == GE_EXPRESSION) {
-        result = (cmp >= 0);
-    } else if (operator == LT_EXPRESSION) {
-        result = (cmp < 0);
-    } else if (operator == LE_EXPRESSION) {
-        result = (cmp <= 0);
+        result = left != right;
     } else {
         char *op_str = crb_get_operator_string(operator);
-        crb_runtime_error(line_number, BAD_OPERATOR_FOR_STRING_ERR,
-                          STRING_MESSAGE_ARGUMENT, "operator", op_str,
-                          MESSAGE_ARGUMENT_END);
+        crb_runtime_error(inter, env, line_number, NOT_BOOLEAN_OPERATOR_ERR,
+                          CRB_STRING_MESSAGE_ARGUMENT, "operator", op_str,
+                          CRB_MESSAGE_ARGUMENT_END);
     }
 
     return result;
 }
 
 static CRB_Boolean
-eval_binary_null(CRB_Interpreter *inter, ExpressionType operator,
+eval_compare_string(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                    ExpressionType operator,
+                    CRB_Value *left, CRB_Value *right, int line_number)
+{
+    CRB_Boolean result;
+    int cmp;
+
+    cmp = CRB_wcscmp(left->u.object->u.string.string,
+                     right->u.object->u.string.string);
+
+    if (operator == EQ_EXPRESSION) {
+        return cmp == 0;
+    } else if (operator == NE_EXPRESSION) {
+        return cmp != 0;
+    } else if (operator == GT_EXPRESSION) {
+        return cmp > 0;
+    } else if (operator == GE_EXPRESSION) {
+        return cmp >= 0;
+    } else if (operator == LT_EXPRESSION) {
+        return cmp < 0;
+    } else if (operator == LE_EXPRESSION) {
+        return cmp <= 0;
+    } else {
+        char *op_str = crb_get_operator_string(operator);
+        crb_runtime_error(inter, env, line_number, BAD_OPERATOR_FOR_STRING_ERR,
+                          CRB_STRING_MESSAGE_ARGUMENT, "operator", op_str,
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+
+    return result;
+}
+
+static CRB_Boolean
+eval_binary_null(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                 ExpressionType operator,
                  CRB_Value *left, CRB_Value *right, int line_number)
 {
     CRB_Boolean result;
@@ -695,34 +718,12 @@ eval_binary_null(CRB_Interpreter *inter, ExpressionType operator,
                     && right->type == CRB_NULL_VALUE);
     } else {
         char *op_str = crb_get_operator_string(operator);
-        crb_runtime_error(line_number, NOT_NULL_OPERATOR_ERR,
-                          STRING_MESSAGE_ARGUMENT, "operator", op_str,
-                          MESSAGE_ARGUMENT_END);
+        crb_runtime_error(inter, env, line_number, NOT_NULL_OPERATOR_ERR,
+                          CRB_STRING_MESSAGE_ARGUMENT, "operator", op_str,
+                          CRB_MESSAGE_ARGUMENT_END);
     }
 
     return result;
-}
-
-void
-chain_string(CRB_Interpreter *inter, CRB_Value *left, CRB_Value *right,
-             CRB_Value *result)
-{
-    CRB_Char    *right_str;
-    CRB_Object  *right_obj;
-    int         len;
-    CRB_Char    *str;
-
-    right_str = CRB_value_to_string(right);
-    right_obj = crb_create_crowbar_string_i(inter, right_str);
-
-    result->type = CRB_STRING_VALUE;
-    len = CRB_wcslen(left->u.object->u.string.string)
-        + CRB_wcslen(right_obj->u.string.string);
-    str = MEM_malloc(sizeof(CRB_Char) * (len + 1));
-    CRB_wcscpy(str, left->u.object->u.string.string);
-    CRB_wcscat(str, right_obj->u.string.string);
-    CRB_print_wcs_ln(stderr, str);
-    result->u.object = crb_create_crowbar_string_i(inter, str);
 }
 
 static void
@@ -739,56 +740,44 @@ eval_binary_expression(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     left_val = peek_stack(inter, 1);
     right_val = peek_stack(inter, 0);
 
-    if (left_val->type == CRB_INT_VALUE
-        && right_val->type == CRB_INT_VALUE) {
-        eval_binary_int(inter, operator,
-                        left_val->u.int_value, right_val->u.int_value,
-                        &result, left->line_number);
-    } else if (left_val->type == CRB_DOUBLE_VALUE
-               && right_val->type == CRB_DOUBLE_VALUE) {
-        eval_binary_double(inter, operator,
-                           left_val->u.double_value, right_val->u.double_value,
-                           &result, left->line_number);
-    } else if (left_val->type == CRB_INT_VALUE
-               && right_val->type == CRB_DOUBLE_VALUE) {
-        eval_binary_double(inter, operator,
-                           (double)left_val->u.int_value,
-                           right_val->u.double_value,
-                           &result, left->line_number);
-    } else if (left_val->type == CRB_DOUBLE_VALUE
-               && right_val->type == CRB_INT_VALUE) {
-        eval_binary_double(inter, operator,
-                           left_val->u.double_value,
-                           (double)right_val->u.int_value,
-                           &result, left->line_number);
+    if (crb_is_numeric_type(left_val->type)
+        && crb_is_numeric_type(right_val->type)) {
+        eval_binary_numeric(inter, env, operator, left_val, right_val,
+                            &result, left->line_number);
     } else if (left_val->type == CRB_BOOLEAN_VALUE
                && right_val->type == CRB_BOOLEAN_VALUE) {
         result.type = CRB_BOOLEAN_VALUE;
         result.u.boolean_value
-            = eval_binary_boolean(inter, operator,
+            = eval_binary_boolean(inter, env, operator,
                                   left_val->u.boolean_value,
                                   right_val->u.boolean_value,
                                   left->line_number);
     } else if (left_val->type == CRB_STRING_VALUE
                && operator == ADD_EXPRESSION) {
-        chain_string(inter, left_val, right_val, &result);
+        chain_string(inter, env, right->line_number,
+                     left_val, right_val, &result);
     } else if (left_val->type == CRB_STRING_VALUE
                && right_val->type == CRB_STRING_VALUE) {
         result.type = CRB_BOOLEAN_VALUE;
         result.u.boolean_value
-            = eval_compare_string(operator, left_val, right_val,
+            = eval_compare_string(inter, env, operator, left_val, right_val,
                                   left->line_number);
     } else if (left_val->type == CRB_NULL_VALUE
                || right_val->type == CRB_NULL_VALUE) {
         result.type = CRB_BOOLEAN_VALUE;
         result.u.boolean_value
-            = eval_binary_null(inter, operator, left_val, right_val,
+            = eval_binary_null(inter, env, operator, left_val, right_val,
                                left->line_number);
+    } else if (crb_is_object_value(left_val->type)
+               && crb_is_object_value(right_val->type)) {
+        result.type = CRB_BOOLEAN_VALUE;
+        result.u.boolean_value
+            = (left_val->u.object == right_val->u.object);
     } else {
         char *op_str = crb_get_operator_string(operator);
-        crb_runtime_error(left->line_number, BAD_OPERAND_TYPE_ERR,
-                          STRING_MESSAGE_ARGUMENT, "operator", op_str,
-                          MESSAGE_ARGUMENT_END);
+        crb_runtime_error(inter, env, left->line_number, BAD_OPERAND_TYPE_ERR,
+                          CRB_STRING_MESSAGE_ARGUMENT, "operator", op_str,
+                          CRB_MESSAGE_ARGUMENT_END);
     }
     pop_value(inter);
     pop_value(inter);
