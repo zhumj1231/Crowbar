@@ -32,9 +32,9 @@ execute_global_statement(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     result.type = NORMAL_STATEMENT_RESULT;
 
     if (env == NULL) {
-        crb_runtime_error(statement->line_number,
+        crb_runtime_error(inter, env, statement->line_number,
                           GLOBAL_STATEMENT_IN_TOPLEVEL_ERR,
-                          MESSAGE_ARGUMENT_END);
+                          CRB_MESSAGE_ARGUMENT_END);
     }
     for (pos = statement->u.global_s.identifier_list; pos; pos = pos->next) {
         GlobalVariableRef *ref_pos;
@@ -42,17 +42,18 @@ execute_global_statement(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
         Variable *variable;
         for (ref_pos = env->global_variable; ref_pos;
              ref_pos = ref_pos->next) {
-            if (!strcmp(ref_pos->variable->name, pos->name))
+            if (!strcmp(ref_pos->name, pos->name))
                 goto NEXT_IDENTIFIER;
         }
         variable = crb_search_global_variable(inter, pos->name);
         if (variable == NULL) {
-            crb_runtime_error(statement->line_number,
+            crb_runtime_error(inter, env, statement->line_number,
                               GLOBAL_VARIABLE_NOT_FOUND_ERR,
-                              STRING_MESSAGE_ARGUMENT, "name", pos->name,
-                              MESSAGE_ARGUMENT_END);
+                              CRB_STRING_MESSAGE_ARGUMENT, "name", pos->name,
+                              CRB_MESSAGE_ARGUMENT_END);
         }
         new_ref = MEM_malloc(sizeof(GlobalVariableRef));
+        new_ref->name = pos->name;
         new_ref->variable = variable;
         new_ref->next = env->global_variable;
         env->global_variable = new_ref;
@@ -62,6 +63,7 @@ execute_global_statement(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
 
     return result;
 }
+
 
 static StatementResult
 execute_elsif(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
@@ -76,8 +78,8 @@ execute_elsif(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     for (pos = elsif_list; pos; pos = pos->next) {
         cond = crb_eval_expression(inter, env, pos->condition);
         if (cond.type != CRB_BOOLEAN_VALUE) {
-            crb_runtime_error(pos->condition->line_number,
-                              NOT_BOOLEAN_TYPE_ERR, MESSAGE_ARGUMENT_END);
+            crb_runtime_error(inter, env, pos->condition->line_number,
+                              NOT_BOOLEAN_TYPE_ERR, CRB_MESSAGE_ARGUMENT_END);
         }
         if (cond.u.boolean_value) {
             result = crb_execute_statement_list(inter, env,
@@ -102,8 +104,8 @@ execute_if_statement(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     result.type = NORMAL_STATEMENT_RESULT;
     cond = crb_eval_expression(inter, env, statement->u.if_s.condition);
     if (cond.type != CRB_BOOLEAN_VALUE) {
-        crb_runtime_error(statement->u.if_s.condition->line_number,
-                          NOT_BOOLEAN_TYPE_ERR, MESSAGE_ARGUMENT_END);
+        crb_runtime_error(inter, env, statement->u.if_s.condition->line_number,
+                          NOT_BOOLEAN_TYPE_ERR, CRB_MESSAGE_ARGUMENT_END);
     }
     DBG_assert(cond.type == CRB_BOOLEAN_VALUE, ("cond.type..%d", cond.type));
 
@@ -128,6 +130,20 @@ execute_if_statement(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     return result;
 }
 
+static StatementResultType
+compare_labels(char *result_label, char *loop_label, 
+               StatementResultType current_result)
+{
+    if (result_label == NULL)
+        return NORMAL_STATEMENT_RESULT;
+
+    if (loop_label && !strcmp(result_label, loop_label)) {
+        return NORMAL_STATEMENT_RESULT;
+    } else {
+        return current_result;
+    }
+}
+
 static StatementResult
 execute_while_statement(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
                         Statement *statement)
@@ -139,8 +155,9 @@ execute_while_statement(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     for (;;) {
         cond = crb_eval_expression(inter, env, statement->u.while_s.condition);
         if (cond.type != CRB_BOOLEAN_VALUE) {
-            crb_runtime_error(statement->u.while_s.condition->line_number,
-                              NOT_BOOLEAN_TYPE_ERR, MESSAGE_ARGUMENT_END);
+            crb_runtime_error(inter, env,
+                              statement->u.while_s.condition->line_number,
+                              NOT_BOOLEAN_TYPE_ERR, CRB_MESSAGE_ARGUMENT_END);
         }
         DBG_assert(cond.type == CRB_BOOLEAN_VALUE,
                    ("cond.type..%d", cond.type));
@@ -153,8 +170,14 @@ execute_while_statement(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
         if (result.type == RETURN_STATEMENT_RESULT) {
             break;
         } else if (result.type == BREAK_STATEMENT_RESULT) {
-            result.type = NORMAL_STATEMENT_RESULT;
+            result.type = compare_labels(result.u.label,
+                                         statement->u.while_s.label,
+                                         result.type);
             break;
+        } else if (result.type == CONTINUE_STATEMENT_RESULT) {
+            result.type = compare_labels(result.u.label,
+                                         statement->u.while_s.label,
+                                         result.type);
         }
     }
 
@@ -178,8 +201,10 @@ execute_for_statement(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
             cond = crb_eval_expression(inter, env,
                                        statement->u.for_s.condition);
             if (cond.type != CRB_BOOLEAN_VALUE) {
-                crb_runtime_error(statement->u.for_s.condition->line_number,
-                                  NOT_BOOLEAN_TYPE_ERR, MESSAGE_ARGUMENT_END);
+                crb_runtime_error(inter, env,
+                                  statement->u.for_s.condition->line_number,
+                                  NOT_BOOLEAN_TYPE_ERR,
+                                  CRB_MESSAGE_ARGUMENT_END);
             }
             DBG_assert(cond.type == CRB_BOOLEAN_VALUE,
                        ("cond.type..%d", cond.type));
@@ -192,8 +217,14 @@ execute_for_statement(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
         if (result.type == RETURN_STATEMENT_RESULT) {
             break;
         } else if (result.type == BREAK_STATEMENT_RESULT) {
-            result.type = NORMAL_STATEMENT_RESULT;
+            result.type = compare_labels(result.u.label,
+                                         statement->u.for_s.label,
+                                         result.type);
             break;
+        } else if (result.type == CONTINUE_STATEMENT_RESULT) {
+            result.type = compare_labels(result.u.label,
+                                         statement->u.for_s.label,
+                                         result.type);
         }
 
         if (statement->u.for_s.post) {
