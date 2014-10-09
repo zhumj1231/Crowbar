@@ -53,13 +53,25 @@ add_ref_in_native_method(CRB_LocalEnvironment *env, CRB_Object *obj)
 }
 
 CRB_Object *
-crb_literal_to_crb_string(CRB_Interpreter *inter, CRB_Char *str)
+crb_literal_to_crb_string_i(CRB_Interpreter *inter, CRB_Char *str)
 {
     CRB_Object *ret;
 
     ret = alloc_object(inter, STRING_OBJECT);
     ret->u.string.string = str;
     ret->u.string.is_literal = CRB_TRUE;
+
+    return ret;
+}
+
+CRB_Object *
+CRB_literal_to_crb_string(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                          CRB_Char *str)
+{
+    CRB_Object *ret;
+
+    ret = crb_literal_to_crb_string_i(inter, str);
+    add_ref_in_native_method(env, ret);
 
     return ret;
 }
@@ -84,6 +96,44 @@ CRB_create_crowbar_string(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     CRB_Object *ret;
 
     ret = crb_create_crowbar_string_i(inter, str);
+    add_ref_in_native_method(env, ret);
+
+    return ret;
+}
+
+CRB_Object *
+crb_string_substr_i(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                    CRB_Object *str, int from, int len, int line_number)
+{
+    int org_len = CRB_wcslen(str->u.string.string);
+    CRB_Char *new_str;
+
+    if (from < 0 || from >= org_len) {
+        crb_runtime_error(inter, env, line_number,
+                          STRING_POS_OUT_OF_BOUNDS_ERR,
+                          CRB_INT_MESSAGE_ARGUMENT, "len", org_len,
+                          CRB_INT_MESSAGE_ARGUMENT, "pos", from,
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+    if (len < 0 || from + len > org_len) {
+        crb_runtime_error(inter, env, line_number, STRING_SUBSTR_LEN_ERR,
+                          CRB_INT_MESSAGE_ARGUMENT, "len", len,
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+    new_str = MEM_malloc(sizeof(CRB_Char) * (len+1));
+    CRB_wcsncpy(new_str, str->u.string.string + from, len);
+    new_str[len] = L'\0';
+
+    return crb_create_crowbar_string_i(inter, new_str);
+}
+
+CRB_Object *
+CRB_string_substr(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                  CRB_Object *str, int from, int len, int line_number)
+{
+    CRB_Object *ret;
+
+    ret = crb_string_substr_i(inter, env, str, from, len, line_number);
     add_ref_in_native_method(env, ret);
 
     return ret;
