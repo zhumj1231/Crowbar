@@ -150,12 +150,37 @@ crb_alloc_expression(ExpressionType type)
 }
 
 Expression *
-crb_create_assign_expression(Expression *left, Expression *operand)
+crb_create_comma_expression(Expression *left, Expression *right)
+{
+    Expression *exp;
+
+    exp = crb_alloc_expression(COMMA_EXPRESSION);
+    exp->u.comma.left = left;
+    exp->u.comma.right = right;
+
+    return exp;
+}
+
+Expression *
+crb_create_assign_expression(CRB_Boolean is_final,
+                             Expression *left, AssignmentOperator operator,
+                             Expression *operand)
 {
     Expression *exp;
 
     exp = crb_alloc_expression(ASSIGN_EXPRESSION);
+    if (is_final) {
+        if (left->type == INDEX_EXPRESSION) {
+            crb_compile_error(ARRAY_ELEMENT_CAN_NOT_BE_FINAL_ERR,
+                              CRB_MESSAGE_ARGUMENT_END);
+        } else if (operator != NORMAL_ASSIGN) {
+            crb_compile_error(COMPLEX_ASSIGNMENT_OPERATOR_TO_FINAL_ERR,
+                              CRB_MESSAGE_ARGUMENT_END);
+        }
+    }
+    exp->u.assign_expression.is_final = is_final;
     exp->u.assign_expression.left = left;
+    exp->u.assign_expression.operator = operator;
     exp->u.assign_expression.operand = operand;
 
     return exp;
@@ -172,9 +197,7 @@ convert_value_to_expression(CRB_Value *v)
     } else if (v->type == CRB_DOUBLE_VALUE) {
         expr.type = DOUBLE_EXPRESSION;
         expr.u.double_value = v->u.double_value;
-    } else {
-        DBG_assert(v->type == CRB_BOOLEAN_VALUE,
-                   ("v->type..%d\n", v->type));
+    } else if (v->type == CRB_BOOLEAN_VALUE) {
         expr.type = BOOLEAN_EXPRESSION;
         expr.u.boolean_value = v->u.boolean_value;
     }
