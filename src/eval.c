@@ -807,8 +807,8 @@ eval_logical_and_or_expression(CRB_Interpreter *inter,
     eval_expression(inter, env, left);
     left_val = pop_value(inter);
     if (left_val.type != CRB_BOOLEAN_VALUE) {
-        crb_runtime_error(left->line_number, NOT_BOOLEAN_TYPE_ERR,
-                          MESSAGE_ARGUMENT_END);
+        crb_runtime_error(inter, env, left->line_number, NOT_BOOLEAN_TYPE_ERR,
+                          CRB_MESSAGE_ARGUMENT_END);
     }
     if (operator == LOGICAL_AND_EXPRESSION) {
         if (!left_val.u.boolean_value) {
@@ -836,23 +836,19 @@ static void
 eval_minus_expression(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
                       Expression *operand)
 {
-    CRB_Value   operand_val;
-    CRB_Value   result;
+    CRB_Value   *operand_val;
 
     eval_expression(inter, env, operand);
-    operand_val = pop_value(inter);
-    if (operand_val.type == CRB_INT_VALUE) {
-        result.type = CRB_INT_VALUE;
-        result.u.int_value = -operand_val.u.int_value;
-    } else if (operand_val.type == CRB_DOUBLE_VALUE) {
-        result.type = CRB_DOUBLE_VALUE;
-        result.u.double_value = -operand_val.u.double_value;
+    operand_val = peek_stack(inter, 0);
+    if (operand_val->type == CRB_INT_VALUE) {
+        operand_val->u.int_value = -operand_val->u.int_value;
+    } else if (operand_val->type == CRB_DOUBLE_VALUE) {
+        operand_val->u.double_value = -operand_val->u.double_value;
     } else {
-        crb_runtime_error(operand->line_number, MINUS_OPERAND_TYPE_ERR,
-                          MESSAGE_ARGUMENT_END);
+        crb_runtime_error(inter, env, operand->line_number,
+                          MINUS_OPERAND_TYPE_ERR,
+                          CRB_MESSAGE_ARGUMENT_END);
     }
-
-    push_value(inter, &result);
 }
 
 CRB_Value
@@ -861,6 +857,23 @@ crb_eval_minus_expression(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
 {
     eval_minus_expression(inter, env, operand);
     return pop_value(inter);
+}
+
+static void
+eval_logical_not_expression(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                            Expression *operand)
+{
+    CRB_Value   *operand_val;
+
+    eval_expression(inter, env, operand);
+    operand_val = peek_stack(inter, 0);
+
+    if (operand_val->type != CRB_BOOLEAN_VALUE) {
+        crb_runtime_error(inter, env, operand->line_number,
+                          NOT_BOOLEAN_TYPE_ERR,
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+    operand_val->u.boolean_value = !operand_val->u.boolean_value;
 }
 
 static CRB_LocalEnvironment *
