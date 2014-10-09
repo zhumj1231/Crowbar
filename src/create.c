@@ -248,6 +248,17 @@ crb_create_minus_expression(Expression *operand)
 }
 
 Expression *
+crb_create_logical_not_expression(Expression *operand)
+{
+    Expression  *exp;
+
+    exp = crb_alloc_expression(LOGICAL_NOT_EXPRESSION);
+    exp->u.logical_not = operand;
+
+    return exp;
+}
+
+Expression *
 crb_create_index_expression(Expression *array, Expression *index)
 {
     Expression *exp;
@@ -294,15 +305,13 @@ crb_create_function_call_expression(char *func_name, ArgumentList *argument)
 }
 
 Expression *
-crb_create_method_call_expression(Expression *expression,
-                                  char *method_name, ArgumentList *argument)
+crb_create_member_expression(Expression *expression, char *member_name)
 {
     Expression  *exp;
 
-    exp = crb_alloc_expression(METHOD_CALL_EXPRESSION);
-    exp->u.method_call_expression.expression = expression;
-    exp->u.method_call_expression.identifier = method_name;
-    exp->u.method_call_expression.argument = argument;
+    exp = crb_alloc_expression(MEMBER_EXPRESSION);
+    exp->u.member_expression.expression = expression;
+    exp->u.member_expression.member_name = member_name;
 
     return exp;
 }
@@ -336,6 +345,21 @@ crb_create_array_expression(ExpressionList *list)
     exp = crb_alloc_expression(ARRAY_EXPRESSION);
     exp->u.array_literal = list;
 
+    return exp;
+}
+
+Expression *
+crb_create_closure_definition(char *identifier,
+                              CRB_ParameterList *parameter_list,
+                              CRB_Block *block)
+{
+    Expression  *exp;
+
+    exp = crb_alloc_expression(CLOSURE_EXPRESSION);
+    exp->u.closure.function_definition
+        = create_function_definition(identifier, parameter_list, CRB_TRUE,
+                                     block);
+    
     return exp;
 }
 
