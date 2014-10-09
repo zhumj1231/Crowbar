@@ -1155,28 +1155,57 @@ static FakeMethodTable st_fake_method_table[] = {
     {ARRAY_OBJECT, "iterator", 0, array_iterator_method},
     {STRING_OBJECT, "length", 0, string_length_method},
     {STRING_OBJECT, "substr", 2, string_substr_method},
-};B_get_type_name(arg1->type),
-                          CRB_STRING_MESSAGE_ARGUMENT,
-                          "type2", CRB_get_type_name(arg2->type),
+};
+
+static FakeMethodTable *
+search_fake_method(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                   int line_number, CRB_FakeMethod *fm)
+{
+    int i;
+
+    for (i = 0; i < ARRAY_SIZE(st_fake_method_table); i++) {
+        if (fm->object->type == st_fake_method_table[i].type
+            && !strcmp(fm->method_name, st_fake_method_table[i].name)) {
+            break;
+        }
+    }
+    if (i == ARRAY_SIZE(st_fake_method_table)) {
+        crb_runtime_error(inter, env, line_number, NO_SUCH_METHOD_ERR,
+                          CRB_STRING_MESSAGE_ARGUMENT, "method_name",
+                          fm->method_name,
                           CRB_MESSAGE_ARGUMENT_END);
     }
-    result->type = CRB_STRING_VALUE;
-    result->u.object
-        = crb_string_substr_i(inter, env, obj,
-                              arg1->u.int_value, arg2->u.int_value,
-                              __LINE__);
+
+    return &st_fake_method_table[i];
 }
 
-static FakeMethodTable st_fake_method_table[] = {
-    {ARRAY_OBJECT, "add", 1, array_add_method},
-    {ARRAY_OBJECT, "size", 0, array_size_method},
-    {ARRAY_OBJECT, "resize", 1, array_resize_method},
-    {ARRAY_OBJECT, "insert", 2, array_insert_method},
-    {ARRAY_OBJECT, "remove", 1, array_remove_method},
-    {ARRAY_OBJECT, "iterator", 0, array_iterator_method},
-    {STRING_OBJECT, "length", 0, string_length_method},
-    {STRING_OBJECT, "substr", 2, string_substr_method},
-};
+static void
+call_fake_method(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                 CRB_LocalEnvironment *caller_env,
+                 Expression *expr, CRB_FakeMethod *fm)
+{
+    CRB_Value           result;
+    ArgumentList        *arg_p;
+    int arg_count = 0;
+    FakeMethodTable *fmt;
+
+    fmt = search_fake_method(inter, env, expr->line_number, fm);
+
+    for (arg_p = expr->u.function_call_expression.argument;
+         arg_p; arg_p = arg_p->next) {
+        arg_count++;
+    }
+    check_method_argument_count(inter, env, expr->line_number,
+                                arg_count,
+                                fmt->argument_count);
+    for (arg_p = expr->u.function_call_expression.argument;
+         arg_p; arg_p = arg_p->next) {
+        eval_expression(inter, caller_env, arg_p->expression);
+    }
+    fmt->func(inter, env, fm->object, &result);
+    shrink_stack(inter, arg_count);
+    push_value(inter, &result);
+}
 
 static void
 eval_function_call_expression(CRB_Interpreter *inter,
