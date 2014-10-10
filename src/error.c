@@ -65,7 +65,7 @@ search_argument(MessageArgument *arg_list,
 {
     int i;
 
-    for (i = 0; arg_list[i].type != MESSAGE_ARGUMENT_END; i++) {
+    for (i = 0; arg_list[i].type != CRB_MESSAGE_ARGUMENT_END; i++) {
         if (!strcmp(arg_list[i].name, arg_name)) {
             *arg = arg_list[i];
             return;

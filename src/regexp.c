@@ -112,8 +112,8 @@ static CRB_NativePointerInfo st_regexp_type_info = {
 CRB_NativePointerInfo *
 crb_get_regexp_info(void)
 {
-    return &st_regexp[[_type_info;
- }
+    return &st_regexp_type_info;
+}
 
 static CRB_Boolean
 match_sub(CRB_Interpreter *inter, CRB_LocalEnvironment *env,

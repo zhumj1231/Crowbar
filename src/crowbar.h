@@ -145,17 +145,17 @@ typedef enum {
 #define crb_is_numeric_type(type)\
   ((type) == CRB_INT_VALUE || (type) == CRB_DOUBLE_VALUE)
 
-#define dkc_is_math_operator(operator) \
+#define crb_is_math_operator(operator) \
   ((operator) == ADD_EXPRESSION || (operator) == SUB_EXPRESSION\
    || (operator) == MUL_EXPRESSION || (operator) == DIV_EXPRESSION\
    || (operator) == MOD_EXPRESSION)
 
-#define dkc_is_compare_operator(operator) \
+#define crb_is_compare_operator(operator) \
   ((operator) == EQ_EXPRESSION || (operator) == NE_EXPRESSION\
    || (operator) == GT_EXPRESSION || (operator) == GE_EXPRESSION\
    || (operator) == LT_EXPRESSION || (operator) == LE_EXPRESSION)
 
-#define dkc_is_logical_operator(operator) \
+#define crb_is_logical_operator(operator) \
   ((operator) == LOGICAL_AND_EXPRESSION || (operator) == LOGICAL_OR_EXPRESSION)
 
 typedef struct ArgumentList_tag {
@@ -190,7 +190,7 @@ typedef struct {
 } BinaryExpression;
 
 typedef struct {
-    char                *identifier;
+    Expression          *function;
     ArgumentList        *argument;
 } FunctionCallExpression;
 

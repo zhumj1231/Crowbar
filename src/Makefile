@@ -33,13 +33,13 @@ INCLUDES = \
 $(TARGET):$(MINICROWBAR) $(FINALOBJS)
 	cd ./memory; $(MAKE);
 	cd ./debug; $(MAKE);
-	$(CC) $(FINALOBJS) -o $@ -lm -lmsvcp60 -lonig
+	$(CC) $(FINALOBJS) -o $@ -lm -lonig
 
 $(MINICROWBAR):$(MINIOBJS)
-	$(CC) $(MINIOBJS) -o $@ -lm -lmsvcp60 -lonig
+	$(CC) $(MINIOBJS) -o $@ -lm -lonig
 
 clean:
-	rm -f *.o lex.yy.c y.tab.c y.tab.h *~
+	rm -f *.o lex.yy.c y.tab.c y.tab.h *~ $(TARGET) $(MINICROWBAR) y.output
 y.tab.h : crowbar.y
 	bison --yacc -dv crowbar.y
 y.tab.c : crowbar.y

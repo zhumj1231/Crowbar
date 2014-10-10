@@ -293,12 +293,13 @@ crb_create_identifier_expression(char *identifier)
 }
 
 Expression *
-crb_create_function_call_expression(char *func_name, ArgumentList *argument)
+crb_create_function_call_expression(Expression *function, 
+                                    ArgumentList *argument)
 {
     Expression  *exp;
 
     exp = crb_alloc_expression(FUNCTION_CALL_EXPRESSION);
-    exp->u.function_call_expression.identifier = func_name;
+    exp->u.function_call_expression.function = function;
     exp->u.function_call_expression.argument = argument;
 
     return exp;
