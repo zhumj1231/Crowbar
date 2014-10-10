@@ -9,8 +9,8 @@ main(int argc, char **argv)
     CRB_Interpreter     *interpreter;
     FILE *fp;
 
-    if (argc != 2) {
-        fprintf(stderr, "usage:%s filename\n", argv[0]);
+    if (argc < 2) {
+        fprintf(stderr, "usage:%s filename arg1, arg2, ...", argv[0]);
         exit(1);
     }
 
@@ -19,9 +19,11 @@ main(int argc, char **argv)
         fprintf(stderr, "%s not found.\n", argv[1]);
         exit(1);
     }
+
     setlocale(LC_CTYPE, "");
     interpreter = CRB_create_interpreter();
     CRB_compile(interpreter, fp);
+    CRB_set_command_line_args(interpreter, argc-2, &argv[2]);
     CRB_interpret(interpreter);
     CRB_dispose_interpreter(interpreter);
 
