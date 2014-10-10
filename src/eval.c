@@ -1454,99 +1454,93 @@ CRB_call_function(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     return ret;
 }
 
-static void
-check_method_argument_count(int line_number,
-                            ArgumentList *arg_list, int arg_count)
+CRB_Value
+CRB_call_function_by_name(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                          int line_number, char *func_name,
+                          int arg_count, CRB_Value *args)
 {
-    ArgumentList        *arg_p;
-    int count = 0;
+    CRB_FunctionDefinition *fd;
+    CRB_Value func;
+    CRB_Value ret;
 
-    for (arg_p = arg_list; arg_p; arg_p = arg_p->next) {
-        count++;
+    fd = CRB_search_function(inter, func_name);
+    if (fd == NULL) {
+        crb_runtime_error(inter, env, line_number,
+                          FUNCTION_NOT_FOUND_ERR, "name", func_name,
+                          CRB_MESSAGE_ARGUMENT_END);
     }
+    func = CRB_create_closure(env, fd);
 
-    if (count < arg_count) {
-        crb_runtime_error(line_number, ARGUMENT_TOO_FEW_ERR,
-                          MESSAGE_ARGUMENT_END);
-    } else if (count > arg_count) {
-        crb_runtime_error(line_number, ARGUMENT_TOO_MANY_ERR,
-                          MESSAGE_ARGUMENT_END);
+    ret = CRB_call_function(inter, env, line_number, &func, arg_count, args);
+
+    return ret;
+}
+
+CRB_Value
+CRB_call_method(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                int line_number, CRB_Object *obj, char *method_name,
+                int arg_count, CRB_Value *args)
+{
+    CRB_Value func;
+    CRB_Value result;
+
+    if (obj->type == STRING_OBJECT || obj->type == ARRAY_OBJECT) {
+        func.type = CRB_FAKE_METHOD_VALUE;
+        func.u.fake_method.method_name = method_name;
+        func.u.fake_method.object = obj;
+    } else if (obj->type == ASSOC_OBJECT) {
+        CRB_Value *func_p;
+        func_p = CRB_search_assoc_member(obj, method_name);
+        if (func_p->type != CRB_CLOSURE_VALUE) {
+            crb_runtime_error(inter, env, line_number,
+                              NOT_FUNCTION_ERR,
+                              CRB_MESSAGE_ARGUMENT_END);
+        }
+        func = *func_p;
     }
+    push_value(inter, &func);
+
+    result = CRB_call_function(inter, env, line_number, &func,
+                               arg_count, args);
+
+    pop_value(inter);
+
+    return result;
 }
 
 static void
-eval_method_call_expression(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
-                            Expression *expr)
+eval_member_expression(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                       Expression *expr)
 {
-    CRB_Value *left;
-    CRB_Value result;
-    CRB_Boolean error_flag = CRB_FALSE;
+    CRB_Value left;
 
-    eval_expression(inter, env, expr->u.method_call_expression.expression);
-    left = peek_stack(inter, 0);
-
-    if (left->type == CRB_ARRAY_VALUE) {
-        if (!strcmp(expr->u.method_call_expression.identifier, "add")) {
-            CRB_Value *add;
-            check_method_argument_count(expr->line_number,
-                                        expr->u.method_call_expression
-                                        .argument, 1);
-            eval_expression(inter, env,
-                            expr->u.method_call_expression.argument
-                            ->expression);
-            add = peek_stack(inter, 0);
-            crb_array_add(inter, left->u.object, *add);
-            pop_value(inter);
-            result.type = CRB_NULL_VALUE;
-        } else if (!strcmp(expr->u.method_call_expression.identifier,
-                           "size")) {
-            check_method_argument_count(expr->line_number,
-                                        expr->u.method_call_expression
-                                        .argument, 0);
-            result.type = CRB_INT_VALUE;
-            result.u.int_value = left->u.object->u.array.size;
-        } else if (!strcmp(expr->u.method_call_expression.identifier,
-                           "resize")) {
-            CRB_Value new_size;
-            check_method_argument_count(expr->line_number,
-                                        expr->u.method_call_expression
-                                        .argument, 1);
-            eval_expression(inter, env,
-                            expr->u.method_call_expression.argument
-                            ->expression);
-            new_size = pop_value(inter);
-            if (new_size.type != CRB_INT_VALUE) {
-                crb_runtime_error(expr->line_number,
-                                  ARRAY_RESIZE_ARGUMENT_ERR,
-                                  MESSAGE_ARGUMENT_END);
-            }
-            crb_array_resize(inter, left->u.object, new_size.u.int_value);
-            result.type = CRB_NULL_VALUE;
-        } else {
-            error_flag = CRB_TRUE;
+    eval_expression(inter,env, expr->u.member_expression.expression);
+    left = pop_value(inter);
+    
+    if (left.type == CRB_ASSOC_VALUE) {
+        CRB_Value *v;
+        v = CRB_search_assoc_member(left.u.object,
+                                    expr->u.member_expression.member_name);
+        if (v == NULL) {
+            crb_runtime_error(inter, env, expr->line_number,
+                              NO_SUCH_MEMBER_ERR,
+                              CRB_STRING_MESSAGE_ARGUMENT, "member_name",
+                              expr->u.member_expression.member_name,
+                              CRB_MESSAGE_ARGUMENT_END);
         }
-
-    } else if (left->type == CRB_STRING_VALUE) {
-        if (!strcmp(expr->u.method_call_expression.identifier, "length")) {
-            check_method_argument_count(expr->line_number,
-                                        expr->u.method_call_expression
-                                        .argument, 0);
-            result.type = CRB_INT_VALUE;
-            result.u.int_value = CRB_wcslen(left->u.object->u.string.string);
-        } else {
-            error_flag = CRB_TRUE;
-        }
+        push_value(inter, v);
+    } else if (left.type == CRB_STRING_VALUE
+               || left.type == CRB_ARRAY_VALUE) {
+        CRB_Value v;
+        v.type = CRB_FAKE_METHOD_VALUE;
+        v.u.fake_method.method_name = expr->u.member_expression.member_name;
+        v.u.fake_method.object = left.u.object;
+        push_value(inter, &v);
     } else {
-        error_flag = CRB_TRUE;
+        crb_runtime_error(inter, env, expr->line_number,
+                          NO_MEMBER_TYPE_ERR,
+                          CRB_MESSAGE_ARGUMENT_END);
     }
-    if (error_flag) {
-        crb_runtime_error(expr->line_number, NO_SUCH_METHOD_ERR,
-                          STRING_MESSAGE_ARGUMENT, "method_name",
-                          expr->u.method_call_expression.identifier,
-                          MESSAGE_ARGUMENT_END);
-    }
-    pop_value(inter);
-    push_value(inter, &result);
 }
 
 static void
@@ -1570,7 +1564,6 @@ eval_array_expression(CRB_Interpreter *inter,
         eval_expression(inter, env, pos->expression);
         v.u.object->u.array.array[i] = pop_value(inter);
     }
-
 }
 
 static void
@@ -1593,9 +1586,15 @@ eval_inc_dec_expression(CRB_Interpreter *inter,
     int         old_value;
     
     operand = get_lvalue(inter, env, expr->u.inc_dec.operand);
+    if (operand == NULL) {
+        crb_runtime_error(inter, env, expr->line_number,
+                          INC_DEC_OPERAND_NOT_EXIST_ERR,
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
     if (operand->type != CRB_INT_VALUE) {
-        crb_runtime_error(expr->line_number, INC_DEC_OPERAND_TYPE_ERR,
-                          MESSAGE_ARGUMENT_END);
+        crb_runtime_error(inter, env, expr->line_number,
+                          INC_DEC_OPERAND_TYPE_ERR,
+                          CRB_MESSAGE_ARGUMENT_END);
     }
     old_value = operand->u.int_value;
     if (expr->type == INCREMENT_EXPRESSION) {
@@ -1608,6 +1607,23 @@ eval_inc_dec_expression(CRB_Interpreter *inter,
 
     result.type = CRB_INT_VALUE;
     result.u.int_value = old_value;
+    push_value(inter, &result);
+}
+
+static void
+eval_closure_expression(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                        Expression *expr)
+{
+    CRB_Value   result;
+
+    result.type = CRB_CLOSURE_VALUE;
+    result.u.closure.function = expr->u.closure.function_definition;
+    if (env) {
+        result.u.closure.environment = env->variable;
+    } else {
+        result.u.closure.environment = NULL;
+    }
+
     push_value(inter, &result);
 }
 
@@ -1628,13 +1644,17 @@ eval_expression(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     case STRING_EXPRESSION:
         eval_string_expression(inter, expr->u.string_value);
         break;
+    case REGEXP_EXPRESSION:
+        eval_regexp_expression(inter, expr->u.regexp_value);
+        break;
     case IDENTIFIER_EXPRESSION:
         eval_identifier_expression(inter, env, expr);
         break;
+    case COMMA_EXPRESSION:
+        eval_comma_expression(inter, env, expr);
+        break;
     case ASSIGN_EXPRESSION:
-        eval_assign_expression(inter, env,
-                               expr->u.assign_expression.left,
-                               expr->u.assign_expression.operand);
+        eval_assign_expression(inter, env, expr);
         break;
     case ADD_EXPRESSION:        /* FALLTHRU */
     case SUB_EXPRESSION:        /* FALLTHRU */
@@ -1646,13 +1666,13 @@ eval_expression(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     case GT_EXPRESSION: /* FALLTHRU */
     case GE_EXPRESSION: /* FALLTHRU */
     case LT_EXPRESSION: /* FALLTHRU */
-    case LE_EXPRESSION: /* FALLTHRU */
+    case LE_EXPRESSION:
         eval_binary_expression(inter, env, expr->type,
                                expr->u.binary_expression.left,
                                expr->u.binary_expression.right);
         break;
     case LOGICAL_AND_EXPRESSION:/* FALLTHRU */
-    case LOGICAL_OR_EXPRESSION:
+    case LOGICAL_OR_EXPRESSION: /* FALLTHRU */
         eval_logical_and_or_expression(inter, env, expr->type,
                                        expr->u.binary_expression.left,
                                        expr->u.binary_expression.right);
@@ -1660,17 +1680,23 @@ eval_expression(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
     case MINUS_EXPRESSION:
         eval_minus_expression(inter, env, expr->u.minus_expression);
         break;
+    case LOGICAL_NOT_EXPRESSION:
+        eval_logical_not_expression(inter, env, expr->u.minus_expression);
+        break;
     case FUNCTION_CALL_EXPRESSION:
         eval_function_call_expression(inter, env, expr);
         break;
-    case METHOD_CALL_EXPRESSION:
-        eval_method_call_expression(inter, env, expr);
+    case MEMBER_EXPRESSION:
+        eval_member_expression(inter, env, expr);
         break;
     case NULL_EXPRESSION:
         eval_null_expression(inter);
         break;
     case ARRAY_EXPRESSION:
         eval_array_expression(inter, env, expr->u.array_literal);
+        break;
+    case CLOSURE_EXPRESSION:
+        eval_closure_expression(inter, env, expr);
         break;
     case INDEX_EXPRESSION:
         eval_index_expression(inter, env, expr);
@@ -1681,7 +1707,7 @@ eval_expression(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
         break;
     case EXPRESSION_TYPE_COUNT_PLUS_1:  /* FALLTHRU */
     default:
-        DBG_panic(("bad case. type..%d\n", expr->type));
+        DBG_assert(0, ("bad case. type..%d\n", expr->type));
     }
 }
 
@@ -1691,6 +1717,32 @@ crb_eval_expression(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
 {
     eval_expression(inter, env, expr);
     return pop_value(inter);
+}
+
+CRB_Value *
+crb_eval_and_peek_expression(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                             Expression *expr)
+{
+    eval_expression(inter, env, expr);
+    return peek_stack(inter, 0);
+}
+
+void
+CRB_push_value(CRB_Interpreter *inter, CRB_Value *value)
+{
+    push_value(inter, value);
+}
+
+CRB_Value
+CRB_pop_value(CRB_Interpreter *inter)
+{
+    return pop_value(inter);
+}
+
+CRB_Value *
+CRB_peek_stack(CRB_Interpreter *inter, int index)
+{
+    return peek_stack(inter, index);
 }
 
 void
