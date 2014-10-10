@@ -1290,6 +1290,170 @@ eval_function_call_expression(CRB_Interpreter *inter,
     push_value(inter, &return_value);
 }
 
+static CRB_Value
+call_crowbar_function_from_native(CRB_Interpreter *inter,
+                                  CRB_LocalEnvironment *env,
+                                  int line_number,
+                                  CRB_LocalEnvironment *caller_env,
+                                  CRB_Value *func,
+                                  int arg_count, CRB_Value *args)
+{
+    CRB_Value   value;
+    StatementResult     result;
+    int arg_idx;
+    CRB_ParameterList   *param_p;
+
+    for (arg_idx = 0,
+             param_p = func->u.closure.function->u.crowbar_f.parameter;
+         arg_idx < arg_count;
+         arg_idx++, param_p = param_p->next) {
+        if (param_p == NULL) {
+            crb_runtime_error(inter, caller_env, line_number,
+                              ARGUMENT_TOO_MANY_ERR,
+                              CRB_MESSAGE_ARGUMENT_END);
+        }
+        CRB_add_local_variable(inter, env, param_p->name, &args[arg_idx],
+                               CRB_FALSE);
+    }
+    if (param_p) {
+        crb_runtime_error(inter, caller_env, line_number,
+                          ARGUMENT_TOO_FEW_ERR,
+                          CRB_MESSAGE_ARGUMENT_END);
+    }
+
+    result = crb_execute_statement_list(inter, env,
+                                        func->u.closure.function
+                                        ->u.crowbar_f.block->statement_list);
+
+    if (result.type == RETURN_STATEMENT_RESULT) {
+        value = result.u.return_value;
+    } else {
+        value.type = CRB_NULL_VALUE;
+    }
+    
+    return value;
+}
+
+static CRB_Value
+call_native_function_from_native(CRB_Interpreter *inter,
+                                 CRB_LocalEnvironment *env,
+                                 int line_number,
+                                 CRB_LocalEnvironment *caller_env,
+                                 CRB_Value *func,
+                                 int arg_count, CRB_Value *args)
+{
+    CRB_Value value;
+    int i;
+    CRB_Value *arg_p;
+
+    for (i = 0; i < arg_count; i++) {
+        push_value(inter, &args[i]);
+    }
+    arg_p = &inter->stack.stack[inter->stack.stack_pointer-arg_count];
+    value = func->u.closure.function->u.native_f.proc(inter, env,
+                                                      arg_count, arg_p);
+    shrink_stack(inter, arg_count);
+
+    return value;
+}
+
+static CRB_Value
+call_fake_method_from_native(CRB_Interpreter *inter,
+                             CRB_LocalEnvironment *env,
+                             int line_number,
+                             CRB_LocalEnvironment *caller_env,
+                             CRB_Value *func,
+                             int arg_count, CRB_Value *args)
+{
+    CRB_Value value;
+    FakeMethodTable *fmt;
+    int i;
+
+    fmt = search_fake_method(inter, env, line_number, &func->u.fake_method);
+    check_method_argument_count(inter, env, line_number, arg_count,
+                                fmt->argument_count);
+    for (i = 0; i < arg_count; i++) {
+        push_value(inter, &args[i]);
+    }
+    fmt->func(inter, env, func->u.fake_method.object, &value);
+    shrink_stack(inter, arg_count);
+
+    return value;
+}
+
+/* 
+ * See also eval_function_call_expression().
+ */
+CRB_Value
+CRB_call_function(CRB_Interpreter *inter, CRB_LocalEnvironment *env,
+                  int line_number, CRB_Value *func,
+                  int arg_count, CRB_Value *args)
+{
+    CRB_Value ret;
+    CRB_LocalEnvironment        *local_env;
+    CRB_Object                  *closure_env;
+    char                        *func_name;
+    RecoveryEnvironment env_backup;
+    int stack_pointer_backup;
+
+    if (func->type == CRB_CLOSURE_VALUE) {
+        func_name = func->u.closure.function->name;
+        closure_env = func->u.closure.environment;
+    } else if (func->type == CRB_FAKE_METHOD_VALUE) {
+        func_name = func->u.fake_method.method_name;
+        closure_env = NULL;
+    } else {
+        DBG_panic(("func->type..%d\n", func->type));
+    }
+    local_env
+        = alloc_local_environment(inter, func_name, line_number, closure_env);
+    if (func->type == CRB_CLOSURE_VALUE
+        && func->u.closure.function->is_closure
+        && func->u.closure.function->name) {
+        CRB_add_assoc_member(inter,
+                             local_env->variable->u.scope_chain.frame,
+                             func->u.closure.function->name,
+                             func, CRB_TRUE);
+    }
+
+    stack_pointer_backup = crb_get_stack_pointer(inter);
+    env_backup = inter->current_recovery_environment;
+    if (setjmp(inter->current_recovery_environment.environment) == 0) {
+        if (func->type == CRB_CLOSURE_VALUE) {
+            switch (func->u.closure.function->type) {
+            case CRB_CROWBAR_FUNCTION_DEFINITION:
+                ret = call_crowbar_function_from_native(inter, local_env,
+                                                        line_number, env, func,
+                                                        arg_count, args);
+                break;
+            case CRB_NATIVE_FUNCTION_DEFINITION:
+                ret = call_native_function_from_native(inter, local_env,
+                                                       line_number, env,
+                                                       func, arg_count, args);
+                break;
+            case CRB_FUNCTION_DEFINITION_TYPE_COUNT_PLUS_1:
+            default:
+                DBG_assert(0, ("bad case..%d\n",
+                               func->u.closure.function->type));
+            }
+        } else if (func->type == CRB_FAKE_METHOD_VALUE) {
+            ret = call_fake_method_from_native(inter, local_env,
+                                               line_number, env,
+                                               func, arg_count, args);
+        } else {
+            DBG_panic(("func->type..%d\n", func->type));
+        }
+    } else {
+        dispose_local_environment(inter);
+        crb_set_stack_pointer(inter, stack_pointer_backup);
+        longjmp(env_backup.environment, LONGJMP_ARG);
+    }
+    inter->current_recovery_environment = env_backup;
+    dispose_local_environment(inter);
+
+    return ret;
+}
+
 static void
 check_method_argument_count(int line_number,
                             ArgumentList *arg_list, int arg_count)
