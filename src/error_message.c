@@ -116,7 +116,7 @@ CRB_ErrorDefinition crb_runtime_error_message_format[] = {
      "ExceptionClassIsNotAssocException"},
     {"异常类中没有create method。",
      "ExceptionClassHasNoCreateMethodException"},
-    {"向函数$(func_name)的第$(idx)个参数传递了错误的类型$(type)。"
+    {"向函数$(func_name)的第$(idx)个参数传递了错误的类型$(type)。",
      "ArgumentTypeMismatchException"},
     {"预期外的宽字符串。",
      "UnexpectedWideStringException"},

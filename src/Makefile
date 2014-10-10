@@ -39,7 +39,7 @@ $(MINICROWBAR):$(MINIOBJS)
 	$(CC) $(MINIOBJS) -o $@ -lm -lonig
 
 clean:
-	rm -f *.o lex.yy.c y.tab.c y.tab.h *~ $(TARGET) $(MINICROWBAR) y.output
+	rm -f *.o lex.yy.c y.tab.c y.tab.h *~ $(TARGET) $(MINICROWBAR) y.output builtin.c
 y.tab.h : crowbar.y
 	bison --yacc -dv crowbar.y
 y.tab.c : crowbar.y

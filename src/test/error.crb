@@ -266,10 +266,10 @@ try {
 # StackTraceIsNotArrayException
 # try {
 #     try {
-# 	{}[10];
+#   {}[10];
 #     } catch (ex) {
-# 	ex.stack_trace = null;
-# 	ex.print_stack_trace();
+#   ex.stack_trace = null;
+#   ex.print_stack_trace();
 #     }
 # } catch (ex2) {
 #     desc_exception(ex2);
@@ -278,10 +278,10 @@ try {
 # StackTraceLineIsNotAssocException
 try {
     try {
-	{}[10];
+    {}[10];
     } catch (ex) {
-	ex.stack_trace[0] = null;
-	ex.print_stack_trace();
+    ex.stack_trace[0] = null;
+    ex.print_stack_trace();
     }
 } catch (ex2) {
     desc_exception(ex2);
@@ -290,22 +290,24 @@ try {
 # StackTraceLineHasNoLineNumberException
 try {
     try {
-	{}[10];
+    {}[10];
     } catch (ex) {
-	ex.stack_trace[0] = new_object();
-	ex.print_stack_trace();
+    ex.stack_trace[0] = new_object();
+    ex.print_stack_trace();
     }
 } catch (ex2) {
     desc_exception(ex2);
 }
+
+
 # StackTraceLineHasNoFuncNameException
 try {
     try {
-	{}[10];
+    {}[10];
     } catch (ex) {
-	ex.stack_trace[0] = new_object();
-	ex.stack_trace[0].line_number = 10;
-	ex.print_stack_trace();
+    ex.stack_trace[0] = new_object();
+    ex.stack_trace[0].line_number = 10;
+    ex.print_stack_trace();
     }
 } catch (ex2) {
     desc_exception(ex2);
@@ -334,6 +336,7 @@ try {
 } catch (ex) {
     desc_exception(ex);
 }
+
 ############################################################
 # FOpenArgumentTypeException
 try {
